@@ -1,0 +1,1778 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Mood Thread</title>
+<meta name="description" content="Swipe to how you feel, let go, and watch your day's mood curve grow.">
+<meta name="theme-color" content="#507A0A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mood Thread">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<style>
+/* Layout: one phone-width screen that never scrolls. The mood swipe IS the app: curve in thin white lines on top,
+   the blob in the middle, and the actions rising from the bottom once a mood is chosen. The whole screen takes the mood's colour. */
+:root{
+  --bg:#F2F3F6; --surface:#FFFFFF; --ink:#151924; --muted:#697085; --line:#E4E7ED; --track:#ECEEF3; --hatch:#C6CBD6; --stage:#0B0C10;
+  --shadow:0 1px 2px rgba(21,25,36,.05),0 8px 24px rgba(21,25,36,.07);
+  --font-display:"Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mood:"Fraunces", "Canela", Georgia, serif;
+  --fg:255,255,255; --inv:21,25,36;
+  --font-body:"Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1117; --surface:#181B24; --ink:#ECEEF4; --muted:#9198AA; --line:#272B37; --track:#222632; --hatch:#3E4352; --stage:#07080C;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.28); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0F1117; --surface:#181B24; --ink:#ECEEF4; --muted:#9198AA; --line:#272B37; --track:#222632; --hatch:#3E4352; --stage:#07080C;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.28); color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--stage);color:rgb(var(--fg));font-family:var(--font-display);font-size:15px;line-height:1.4;-webkit-font-smoothing:antialiased;overflow:hidden;overscroll-behavior:none}
+button,input,textarea{font:inherit;color:inherit}
+button{-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid rgb(var(--fg));outline-offset:2px}
+
+.app{--g1:#7A5E06;--g2:#C29A1E;position:relative;width:min(430px,100%);height:100%;margin:0 auto;display:flex;flex-direction:column;overflow:hidden;color:rgb(var(--fg));
+  background:radial-gradient(120% 56% at 50% 46%,rgba(255,255,255,.2),transparent 64%),linear-gradient(172deg,var(--g1),var(--g2));
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:0 14px}
+
+/* top: the curve, in thin white lines */
+.top-row{display:flex;justify-content:space-between;align-items:center;gap:8px;height:34px}
+.daynav{display:flex;align-items:center}
+.daynav button{background:none;border:0;color:rgb(var(--fg));cursor:pointer}
+.chev{width:22px;height:30px;display:grid;place-items:center;opacity:.55}
+.chev:disabled{opacity:.16;cursor:default}
+.daylabel{font-weight:300;font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;opacity:.9;padding:6px 4px;white-space:nowrap}
+.tools{display:flex;align-items:center;gap:6px}
+.tg{display:flex}
+.tg button{font-weight:300;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;background:none;border:0;border-bottom:1px solid transparent;padding:6px 6px 4px;margin:0 2px;opacity:.5;cursor:pointer}
+.tg button[aria-pressed="true"]{opacity:1;border-bottom-color:rgba(var(--fg),.8)}
+.pinbtn{flex:none;width:30px;height:30px;border-radius:50%;border:1px solid rgba(var(--fg),.4);background:none;color:inherit;display:grid;place-items:center;cursor:pointer;padding:0}
+.pinbtn svg{width:14px;height:14px}
+.chart{min-height:118px}
+.chart svg{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
+.chart .mid{stroke:rgb(var(--fg));stroke-opacity:.28;stroke-width:1;stroke-dasharray:1.5 5}
+.chart .sep{stroke:rgb(var(--fg));stroke-opacity:.16;stroke-width:1}
+.chart .lbl{font-family:var(--font-display);font-size:9px;font-weight:300;letter-spacing:.1em;fill:rgb(var(--fg));fill-opacity:.55;text-transform:uppercase}
+.chart .lbl.on{fill-opacity:1;font-weight:500}
+/* the curve itself is heat-mapped: red at the bottom, green at the top. A thin white edge keeps it readable on any mood colour. */
+.chart .line{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.chart .lineb{fill:none;stroke:rgb(var(--fg));stroke-opacity:.9;stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.chart .nowl{stroke:rgb(var(--fg));stroke-opacity:.3;stroke-width:1}
+.chart .none{font-family:var(--font-display);font-size:12px;font-weight:300;letter-spacing:.08em;fill:rgb(var(--fg));fill-opacity:.6}
+.pt{cursor:pointer;outline:none}
+/* crown = the day's highlight, skull = its low point: on the feedback screen's corners, on both curves, in the places view and in the wrap-up */
+.mk{cursor:pointer;fill:rgb(var(--fg));outline:none}
+.mk:focus-visible path,.mk:hover path{filter:drop-shadow(0 0 3px rgb(var(--fg)))}
+.mkb{position:absolute;left:0;top:4px;z-index:3;display:grid;justify-items:center;gap:4px;width:60px;padding:0;border:0;background:none;color:rgb(var(--fg));cursor:pointer;opacity:0;pointer-events:none;transform:scale(.6);transition:opacity .2s,transform .2s}
+.mkb.r{left:auto;right:0}
+.mkb svg{box-sizing:border-box;width:44px;height:44px;padding:10px;border-radius:50%;border:1px solid rgba(var(--fg),.5);background:rgba(var(--fg),.12);fill:currentColor;transition:background .2s,color .2s,box-shadow .2s}
+.mkb span{font-weight:300;font-size:9px;letter-spacing:.14em;text-transform:uppercase;opacity:.85;white-space:nowrap}
+.mkb[aria-pressed="true"] svg{background:rgb(var(--fg));color:var(--g1);border-color:transparent;box-shadow:0 0 14px rgba(255,255,255,.55)}
+.mkb[aria-pressed="true"] span{opacity:1;font-weight:500}
+.app.noticed .mkb{opacity:1;pointer-events:auto;transform:none;transition:opacity .4s ease 2s,transform .5s cubic-bezier(.3,1.6,.5,1) 2s}
+.mkb.pop svg{animation:fpop .5s cubic-bezier(.3,1.6,.5,1)}
+.ib svg.mki{fill:currentColor;stroke:none;width:23px;height:23px}
+.wr-mkbig svg{display:block;width:62px;height:62px;fill:rgb(var(--fg))}
+.wr-pick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 2px;width:100%;max-width:350px}
+.wr-pick button{border:0;background:none;color:#fff;display:grid;justify-items:center;gap:0;font-weight:300;font-size:11.5px;cursor:pointer;padding:2px 0 4px;min-width:0}
+.wr-pick button:disabled{opacity:.35;cursor:default}
+.wr-pick svg{width:min(66px,18vw);height:min(66px,18vw);overflow:visible}
+.wr-pick b{font-weight:500;font-size:13px;font-variant-numeric:tabular-nums}
+.wr-pick span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wr-mk{fill:rgb(var(--fg));animation:wrPt .5s ease 2s backwards}
+.map .mki{fill:#fff;pointer-events:none}
+.pt .d{fill:rgb(var(--fg));transition:r .15s}
+.pt .d.bare{fill:rgba(0,0,0,.28);stroke:rgb(var(--fg));stroke-width:1.4}
+.pt:hover .d,.pt:focus-visible .d{r:5.5}
+.pt.land .d{animation:land .7s ease-out}
+@keyframes land{0%{r:1}45%{r:9}100%{r:3.4}}
+.wkd{fill:transparent;cursor:pointer}
+.wkd:hover{fill:rgb(var(--fg));fill-opacity:.07}
+#ghost{fill:none;stroke:rgb(var(--fg));stroke-width:1.6;animation:gh 1.4s ease-in-out infinite alternate}
+@keyframes gh{from{stroke-opacity:.35}to{stroke-opacity:1}}
+#ghostL{stroke:rgb(var(--fg));stroke-opacity:.5;stroke-width:1.2;stroke-dasharray:2 4}
+/* the dashboard (date, day/week, places, curve) hides behind a tab that hangs from the top: pull it down or tap it */
+.dash{height:0;overflow:hidden;transition:height .4s cubic-bezier(.3,.7,.2,1)}
+.dash.drag{transition:none}
+.dash-in{padding-top:8px;padding-bottom:4px}
+.pull{position:relative;min-height:30px;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.under{display:grid;justify-items:center;margin-top:16px;padding-bottom:6px}
+.tab{position:absolute;left:50%;top:0;margin-left:-46px;width:92px;height:30px;padding:0;border:0;background:none;color:rgb(var(--fg));display:grid;place-items:center;cursor:grab;touch-action:none}
+.tab svg{width:54px;height:16px;transition:transform .35s;animation:tabHint 2.6s ease-in-out infinite}
+@keyframes tabHint{0%,70%,100%{translate:0 0}85%{translate:0 3px}}
+.app.dashOpen .tab svg{transform:rotate(180deg);animation:none}
+.tab.bump svg{animation:tabBump .55s cubic-bezier(.3,1.6,.5,1)}
+@keyframes tabBump{0%{scale:1}40%{scale:1.35 1.7}100%{scale:1}}
+/* four check-ins a day: four little blobs that wake up one by one */
+.checks{display:grid;justify-items:center;gap:7px;font-weight:300;font-size:11px;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+.ckrow{display:flex;gap:9px}
+.checks .ck{width:29px;height:29px}
+.checks em,.ndchecks em{font-style:normal;opacity:.85}
+.ck{position:relative;flex:none;width:22px;height:22px;display:grid;place-items:center}
+.ck svg{display:block;width:100%;height:100%;overflow:visible}
+.ck.zz{opacity:.62}
+.ck.next svg{animation:ckWait 1.9s ease-in-out infinite}
+.ck.prog svg{animation:ckWait .9s ease-in-out infinite}
+@keyframes ckWait{0%,100%{transform:scale(.9)}50%{transform:scale(1.12)}}
+.ck.pop svg{animation:ckPop .8s cubic-bezier(.3,1.7,.5,1) backwards}
+@keyframes ckPop{0%{transform:scale(.2) rotate(-30deg)}60%{transform:scale(1.4) rotate(8deg)}100%{transform:none}}
+.ck.pop::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:1.5px solid rgb(var(--fg));opacity:0;pointer-events:none;animation:ckRing .8s ease-out}
+@keyframes ckRing{from{opacity:.9;transform:scale(.5)}to{opacity:0;transform:scale(2.4)}}
+.exnote{display:block;margin:0 auto;white-space:nowrap;background:none;border:0;font-weight:300;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;opacity:.6;cursor:pointer;padding:4px 8px}
+
+/* middle: swipe the mood */
+.temp{position:relative;flex:1;min-height:0;touch-action:none;cursor:ns-resize;user-select:none;-webkit-user-select:none;outline:none}
+.temp:focus-visible{box-shadow:inset 0 0 0 1.5px rgba(var(--fg),.5);border-radius:24px;outline:none}
+.facewrap{position:absolute;left:0;right:30px;top:50%;transform:translateY(-50%);display:grid;justify-items:center;gap:2px;pointer-events:none}
+#face{width:min(220px,54vw,29vh);height:min(220px,54vw,29vh);overflow:visible}
+.word{margin:4px 0 0;font-family:var(--font-mood);font-weight:800;font-variation-settings:"SOFT" 100,"WONK" 0;font-size:40px;letter-spacing:.015em;text-transform:uppercase;line-height:1.1;min-height:1.1em}
+.detail{margin:0;font-weight:300;font-size:13px;letter-spacing:.03em;opacity:.88;min-height:1.4em;max-width:100%;padding:0 10px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vscale{transition:opacity .3s;position:absolute;right:0;top:12%;bottom:12%;width:24px;display:flex;flex-direction:column;align-items:center;gap:8px;opacity:.55;pointer-events:none}
+.vscale span{font-weight:300;font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;writing-mode:vertical-rl;white-space:nowrap}
+.vs-line{position:relative;flex:1;width:1px;background:rgba(var(--fg),.7);display:flex;flex-direction:column;justify-content:space-between;align-items:center}
+.vs-line i{display:block;width:7px;height:1px;background:rgb(var(--fg))}
+.vs-line b{position:absolute;left:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:rgb(var(--fg));box-shadow:0 0 0 3px rgba(var(--fg),.25)}
+.hint{position:absolute;left:0;right:30px;bottom:6px;margin:0;text-align:center;font-weight:300;font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;transition:opacity .3s;pointer-events:none}
+
+/* bottom: appears once the swipe stops */
+.actions{display:grid;justify-items:center;gap:10px;transition:opacity .32s ease,transform .32s cubic-bezier(.3,.7,.2,1)}
+.actions:not(.show){opacity:0;transform:translateY(18px);pointer-events:none}
+.meta{display:inline-flex;align-items:center;gap:6px;background:none;border:0;font-weight:300;font-size:12.5px;letter-spacing:.08em;opacity:.9;cursor:pointer;padding:4px 10px}
+.meta svg{width:12px;height:12px}
+.icons{display:flex;gap:22px}
+.icons.static{gap:12px}
+.ib{position:relative;width:56px;height:56px;border-radius:50%;border:1px solid rgba(var(--fg),.5);background:rgba(var(--fg),.14);display:grid;place-items:center;cursor:pointer;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:transform .12s,background .2s,color .2s}
+.ib:active{transform:scale(.94)}
+.ib svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.ib svg .f{fill:currentColor;stroke:none}
+.ib.set{background:rgb(var(--fg));color:rgb(var(--inv));border-color:rgb(var(--fg))}
+/* the one action: a narrower glowing pill. The two extras pop out of it once the feeling is noticed. */
+.slot{display:grid;place-items:center;width:100%}
+.slot > *{grid-area:1/1}
+.slot{min-height:112px;padding-top:6px}
+.ib{transition:transform .2s,background .2s,color .2s}
+/* the two fine-tuning buttons that follow the affirmation */
+.tune{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;width:100%;align-items:center}
+.okb{grid-column:2;grid-row:1/3;width:58px;height:58px;border-radius:50%;border:0;background:rgb(var(--fg));color:var(--g1);display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.28),0 10px 18px rgba(0,0,0,.22);opacity:0;transform:scale(.4);pointer-events:none;transition:opacity .2s,transform .2s}
+.okb svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}
+.actions.noticed .okb{opacity:1;transform:none;pointer-events:auto;transition:opacity .4s ease 2.75s,transform .6s cubic-bezier(.3,1.7,.5,1) 2.75s}
+.actions.noticed .okb:active{transform:scale(.92);transition:transform .1s}
+.tb{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:1px solid rgba(var(--fg),.5);border-radius:999px;padding:11px 18px 11px 14px;color:rgb(var(--fg));cursor:pointer;
+  background:rgba(var(--fg),.14);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);font-weight:300;font-size:15.5px;letter-spacing:.02em;
+  opacity:0;transform:translateY(18px);pointer-events:none;transition:opacity .2s,transform .2s,background .2s}
+.tb svg{width:24px;height:24px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.tb svg .f{fill:currentColor;stroke:none}
+.tb span{flex:1;min-width:0}
+.tb{grid-column:1}
+.helpt{grid-column:1/-1;background:rgba(var(--fg),.28);font-weight:400}
+.helpt svg{width:19px;height:19px;margin:0 3px 0 2px}
+.tune.hashelp .okb{grid-row:2/4}
+.tb.set{background:rgba(var(--fg),.3)}
+.tb.set::after{content:"✓";font-weight:400}
+.tb:active{background:rgba(var(--fg),.3)}
+.actions.noticed .tb{opacity:1;transform:none;pointer-events:auto;transition:opacity .5s ease 2.4s,transform .6s cubic-bezier(.3,1.5,.5,1) 2.4s,background .2s}
+.actions.noticed .tb + .tb{transition-delay:2.56s,2.56s,0s}
+
+/* after "Feeling noticed": the blob steps back and the affirmation takes the stage */
+#face{transition:width .5s cubic-bezier(.3,.7,.2,1),height .5s cubic-bezier(.3,.7,.2,1)}
+.word{transition:font-size .4s}
+.app.noticed #face{width:min(112px,16vh);height:min(112px,16vh)}
+.app.noticed .word{font-size:22px;opacity:.95;margin-top:0}
+.app.noticed .detail:empty{display:none}
+.affirm{display:none}
+.app.noticed .affirm{display:grid;justify-items:center;align-items:start;max-width:350px;padding:22px 30px 0}
+.app.noticed .facewrap{right:0}
+.app.noticed .vscale{opacity:0}
+.app.noticed .word{margin-top:10px}
+.app.noticed .detail{margin-top:4px}
+.affirm > *{grid-area:1/1}
+.wd{position:relative;margin:0;font-weight:500;font-size:30px;letter-spacing:.01em;line-height:1.2;pointer-events:none;animation:wdShow 1.75s ease both}
+@keyframes wdShow{0%{opacity:0;transform:scale(.5) translateY(10px)}13%{opacity:1;transform:scale(1.1)}23%{transform:none}76%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-8px)}}
+.wd i{position:absolute;left:50%;top:50%;font-style:normal;font-size:13px;line-height:1;pointer-events:none;opacity:0;animation:wdSp 1.1s ease-out .2s backwards}
+@keyframes wdSp{0%{opacity:0;transform:translate(-50%,-50%) scale(.2)}30%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(var(--s)) rotate(120deg)}}
+.am{margin:0;text-align:center;font-weight:300;font-size:17px;line-height:1.62;opacity:.96;text-wrap:balance;animation:amIn .9s ease 1.6s backwards}
+@keyframes amIn{from{opacity:0;transform:translateY(10px)}to{opacity:.94;transform:none}}
+
+/* the ending */
+.noted{position:absolute;inset:0;z-index:30;display:grid;place-items:center;overflow:hidden;cursor:pointer;
+  background:radial-gradient(circle at 50% 36%,rgba(255,255,255,.34),rgba(255,255,255,0) 60%),linear-gradient(172deg,var(--g1),var(--g2))}
+.noted.go{animation:ndIn .35s ease backwards}
+@keyframes ndIn{from{opacity:0}}
+.noted.bye{opacity:0;transition:opacity .3s ease .22s}
+#ndFx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.ndc{position:relative;display:grid;justify-items:center;gap:10px;padding:0 26px;max-width:400px;text-align:center;transform-origin:50% 0}
+.noted.bye .ndc{transform:translateY(-36vh) scale(.1);opacity:0;transition:transform .5s cubic-bezier(.6,0,.85,.35),opacity .45s ease .05s}
+.ndmk{position:relative;width:86px;height:86px;margin-bottom:6px}
+.ndmk svg{display:block;width:100%;height:100%;overflow:visible}
+.ndmk circle,.ndmk path{fill:none;stroke:rgb(var(--fg));stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1}
+.ndmk circle{stroke-width:3;transform:rotate(-90deg);transform-origin:40px 40px}
+.ndmk path{stroke-width:5.5}
+@keyframes ndDraw{from{stroke-dashoffset:1}}
+.noted.go .ndmk circle{animation:ndDraw .75s cubic-bezier(.6,0,.2,1) .1s backwards}
+.noted.go .ndmk path{animation:ndDraw .38s cubic-bezier(.3,.9,.3,1) .72s backwards}
+.noted.go .ndmk svg{animation:ndBeat .55s ease 1.05s}
+@keyframes ndBeat{35%{transform:scale(1.16)}}
+.ndmk::before,.ndmk::after{content:"";position:absolute;inset:3px;border-radius:50%;border:1.5px solid rgb(var(--fg));opacity:0;pointer-events:none}
+.noted.go .ndmk::before{animation:ndRing 1.1s ease-out 1.05s}
+.noted.go .ndmk::after{animation:ndRing 1.3s ease-out 1.25s}
+@keyframes ndRing{from{opacity:.75;transform:scale(1)}to{opacity:0;transform:scale(3.4)}}
+.nt{margin:0;font-family:var(--font-mood);font-weight:800;font-variation-settings:"SOFT" 100,"WONK" 0;font-size:clamp(50px,16vw,70px);letter-spacing:-.01em;line-height:1;white-space:nowrap}
+.nt span{display:inline-block}
+.noted.go .nt span{animation:ndLtr .62s cubic-bezier(.2,1.35,.4,1) backwards;animation-delay:calc(1s + var(--i,0) * .055s)}
+@keyframes ndLtr{from{opacity:0;transform:translateY(.6em) rotate(7deg);filter:blur(6px)}}
+.nt .sp{margin-left:.12em;font-size:.72em}
+.noted.go .nt .sp{animation:ndSpk .8s cubic-bezier(.3,1.7,.5,1) 1.5s backwards}
+@keyframes ndSpk{from{opacity:0;transform:scale(0) rotate(-120deg)}}
+.ndline{width:min(230px,60vw);height:14px;margin-top:-6px;overflow:visible}
+.ndline path{fill:none;stroke:rgb(var(--fg));stroke-width:2.4;stroke-linecap:round;stroke-dasharray:1;opacity:.85}
+.noted.go .ndline path{animation:ndDraw .6s ease-out 1.5s backwards}
+@keyframes upIn{from{opacity:0;transform:translateY(12px)}}
+.nm{margin:6px 0 0;font-weight:300;font-size:16.5px;line-height:1.5;text-wrap:balance}
+.noted.go .nm{animation:upIn .7s ease 1.85s backwards}
+.ndchecks{display:grid;justify-items:center;gap:10px;margin-top:10px;font-weight:300;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase}
+.ndchecks .ckrow{display:flex;gap:10px}
+.ndchecks .ck{width:40px;height:40px}
+.ndchecks em{margin:0;opacity:.92}
+.noted.go .ndchecks{animation:upIn .6s ease 2.3s backwards}
+.noted.go .ndchecks .ck.pop svg{animation-delay:2.85s}
+.noted.go .ndchecks .ck.pop::after{animation-delay:2.85s}
+/* the wrap-up: a tap-through story, one thought per card */
+.wrapbtn{display:block;margin-top:14px;border:1px solid rgba(var(--fg),.5);border-radius:999px;background:rgba(var(--fg),.14);color:inherit;padding:9px 18px;font-weight:400;font-size:13.5px;letter-spacing:.04em;cursor:pointer}
+.wrapbtn.ready{background:rgb(var(--fg));color:var(--g1);border-color:transparent;font-weight:600;box-shadow:0 0 18px rgba(255,255,255,.5)}
+.tab.ready svg{filter:drop-shadow(0 0 5px #fff);animation:tabHint 1.3s ease-in-out infinite}
+.wkwraps{display:grid;justify-items:center;gap:7px;font-weight:300;font-size:11px;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+.wkwraps .ckrow{gap:5px}
+.wkwraps button{border:0;background:none;color:inherit;display:grid;justify-items:center;gap:3px;padding:2px 3px;cursor:pointer}
+.wkwraps button:disabled{cursor:default}
+.wkwraps .ck{width:31px;height:31px}
+.wkwraps u{text-decoration:none;font-size:9.5px;letter-spacing:.1em;opacity:.85}
+.wkwraps em{font-style:normal;opacity:.8}
+.splash small{display:block;margin-top:18px;font-family:var(--font-display);font-weight:300;font-size:17px;line-height:1.45;letter-spacing:.01em;font-variation-settings:normal;max-width:300px;margin-inline:auto;text-wrap:balance;animation:upIn .7s ease .9s backwards}
+.sh.wrapsh{padding:0;overflow:hidden}
+.wr{perspective:1100px}
+.wr-card.flip{animation:wrFlip .75s cubic-bezier(.3,1.2,.4,1)}
+@keyframes wrFlip{from{transform:rotateY(-92deg) scale(.92);opacity:.2}}
+.wr-h.small{font-size:clamp(23px,6.6vw,28px)}
+.wr-scale{width:min(281px,78vw);height:auto;overflow:visible;color:#fff}
+.wr-scale text,.wr-dial text{font-family:var(--font-display);font-size:9.5px;font-weight:300;fill:currentColor;fill-opacity:.8;letter-spacing:.12em;text-transform:uppercase}
+.wr-gap{stroke-dasharray:1;animation:ndDraw .8s ease-out .7s backwards}
+.wr-br{fill:none;stroke:rgb(var(--fg));stroke-width:1.8;stroke-linecap:round;stroke-dasharray:.02 .045;animation:wrPt .5s ease 2.2s backwards}
+.wr-curve text.wr-brt{font-size:12.5px;font-weight:500;fill-opacity:1;letter-spacing:.02em;animation:wrPt .5s ease 2.4s backwards}
+.wr-dialbox{position:relative;width:min(300px,82vw);display:grid;place-items:center}
+.wr-dial{display:block;width:100%;height:auto;overflow:visible;color:#fff}
+.wr-s3{fill:none;stroke:currentColor;stroke-opacity:.3;stroke-width:9;stroke-linecap:round}
+.wr-s3.on{stroke-opacity:.95}
+.wr-dial text.on{fill-opacity:1;font-weight:500}
+.wr-dial.off{opacity:.45}
+.wr-needle{transform-origin:150px 148px;transform:rotate(var(--a));animation:wrNeedle 1.3s cubic-bezier(.3,1.5,.5,1) .5s backwards}
+@keyframes wrNeedle{from{transform:rotate(0deg)}}
+.wr-needle path{stroke:currentColor;stroke-width:3.4;stroke-linecap:round;fill:none}
+.wr-needle circle{fill:currentColor}
+.wr-dialbox > .wr-lock{position:absolute;left:50%;top:52%;width:54px;height:54px;margin-left:-27px}
+.wr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;width:100%;max-width:340px}
+.wr-tile{border-radius:20px;background:rgba(var(--fg),.15);border:1px solid rgba(var(--fg),.22);padding:11px 8px 12px;display:grid;justify-items:center;align-content:start;gap:2px;min-height:132px;color:#fff}
+.wr-tile.wide{grid-column:1/-1;min-height:0;padding:11px}
+.wr-tile em{font-style:normal;font-weight:300;font-size:10px;letter-spacing:.18em;text-transform:uppercase;opacity:.85}
+.wr-tile > svg{width:60px;height:60px;overflow:visible}
+.wr-tile b{font-weight:500;font-size:14.5px;line-height:1.25;text-wrap:balance}
+.wr-tile span{font-weight:300;font-size:12px;opacity:.9;text-wrap:balance}
+.wr-tile strong{font-family:var(--font-mood);font-weight:800;font-variation-settings:"SOFT" 100,"WONK" 0;font-size:44px;line-height:1.3}
+.wr-tile.sealed{background:rgba(var(--fg),.07);border-style:dashed}
+.wr-tile.sealed > svg{width:40px;height:40px;margin:10px 0 6px;opacity:.85}
+.wr-bars{display:flex;align-items:flex-end;gap:7px;height:62px;padding-bottom:13px;margin:2px 0}
+.wr-bars i{position:relative;display:block;width:16px;height:calc(var(--h) * 46px);border-radius:6px;background:rgba(var(--fg),.4);animation:wrBar .7s cubic-bezier(.3,1.3,.5,1) .4s backwards;transform-origin:50% 100%}
+.wr-bars i.on{background:rgb(var(--fg))}
+.wr-bars i.nil{background:rgba(var(--fg),.16)}
+@keyframes wrBar{from{transform:scaleY(.05)}}
+.wr-bars u{position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);text-decoration:none;font-style:normal;font-weight:300;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;opacity:.85}
+.wr-note{position:relative;padding:22px 20px;border-radius:26px;background:rgba(var(--fg),.14);border:1px solid rgba(var(--fg),.25);transform:rotate(-1.5deg);max-width:330px}
+.wr-greet{display:inline-flex;align-items:center;gap:9px;font-weight:300;font-size:14px;cursor:pointer}
+.wr-greet input{appearance:none;-webkit-appearance:none;width:22px;height:22px;margin:0;border-radius:7px;border:1.5px solid rgb(var(--fg));background:none;display:grid;place-items:center;cursor:pointer}
+.wr-greet input:checked{background:rgb(var(--fg))}
+.wr-greet input:checked::after{content:"";width:11px;height:6px;border-left:2.4px solid var(--g1);border-bottom:2.4px solid var(--g1);transform:translateY(-1.5px) rotate(-45deg)}
+.wr{height:100%;display:flex;flex-direction:column;gap:6px;cursor:pointer;user-select:none;-webkit-user-select:none;
+  padding:10px max(22px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(22px, env(safe-area-inset-left, 0px))}
+.wr-top{display:flex;align-items:center;gap:12px}
+.wr-seg{flex:1;display:flex;gap:4px}
+.wr-seg i{flex:1;height:3px;border-radius:2px;background:rgba(var(--fg),.28)}
+.wr-seg i.on{background:rgb(var(--fg))}
+.wr-card{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center}
+.wr-card > *{animation:upIn .6s ease backwards}
+.wr-card > :nth-child(2){animation-delay:.12s}.wr-card > :nth-child(3){animation-delay:.26s}.wr-card > :nth-child(4){animation-delay:.42s}.wr-card > :nth-child(5){animation-delay:.58s}.wr-card > :nth-child(6){animation-delay:.72s}
+.wr-k{margin:0;font-weight:300;font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.88}
+.wr-h{margin:0;font-family:var(--font-mood);font-weight:800;font-variation-settings:"SOFT" 100,"WONK" 0;font-size:clamp(29px,8.4vw,37px);line-height:1.1;text-wrap:balance;max-width:340px}
+.wr-p{margin:0;font-weight:300;font-size:17px;line-height:1.55;max-width:316px;text-wrap:pretty}
+.wr-ex{margin:0;font-weight:300;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.65}
+.wr-tap{margin:0;text-align:center;font-weight:300;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.6;min-height:1.4em}
+.wr-face{margin:0;display:grid;justify-items:center;gap:0;color:#fff}
+.wr-face svg{width:min(116px,28vw);height:min(116px,28vw);overflow:visible;animation:bob 3.4s ease-in-out infinite}
+.wr-face figcaption{display:grid;gap:1px;font-weight:300;font-size:12.5px;letter-spacing:.05em}
+.wr-face b{font-weight:500;font-size:17px;letter-spacing:.01em}
+.wr-duo{display:flex;justify-content:center;align-items:flex-start;gap:18px}
+.wr-guess{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;width:100%;max-width:340px}
+.wr-guess button{border:0;background:none;color:#fff;display:grid;justify-items:center;font-weight:400;font-size:12.5px;cursor:pointer;padding:2px 0 6px}
+.wr-guess svg{width:min(72px,19vw);height:min(72px,19vw);overflow:visible}
+.wr-skip{border:0;background:none;color:inherit;font-weight:300;font-size:13px;letter-spacing:.1em;text-decoration:underline;opacity:.8;cursor:pointer;padding:8px}
+.wr-curve{width:100%;max-width:340px}
+.wr-curve svg{display:block;width:100%;height:auto;overflow:visible}
+.wr-mid{stroke:rgba(var(--fg),.3);stroke-width:1;stroke-dasharray:1.5 5}
+.wr-line{fill:none;stroke:rgb(var(--fg));stroke-width:2.4;stroke-linecap:round;stroke-dasharray:1;animation:ndDraw 1.7s ease-in-out .4s backwards}
+.wr-pt{color:#fff;overflow:visible;animation:wrPt .45s ease backwards;animation-delay:var(--d)}
+@keyframes wrPt{from{opacity:0}}
+.wr-curve text{font-family:var(--font-display);font-size:10px;font-weight:300;fill:rgb(var(--fg));fill-opacity:.85;letter-spacing:.08em}
+.wr-done{border:0;border-radius:999px;padding:14px 40px;background:rgb(var(--fg));color:var(--g1);font:inherit;font-weight:600;font-size:17px;letter-spacing:.02em;text-transform:none;cursor:pointer;margin-top:6px;box-shadow:0 4px 0 rgba(0,0,0,.25),0 10px 18px rgba(0,0,0,.2)}
+@media (max-height:600px){.wr-tile{min-height:104px;padding:8px 6px 9px}.wr-tile > svg{width:44px;height:44px}.wr-tile strong{font-size:34px}.wr-bars{height:50px}.wr-bars i{height:calc(var(--h) * 34px)}.wr-dialbox{width:240px}.wr-note{padding:14px}.wr-card{gap:10px}.wr-p{font-size:15px;line-height:1.45}.wr-face svg{width:86px;height:86px}.wr-h{font-size:27px}.wr-guess svg{width:60px;height:60px}}
+/* the greeting: a splash when the app opens, then it steps aside */
+.splash{position:absolute;inset:0;z-index:36;display:grid;place-items:center;cursor:pointer;transition:opacity .5s ease;
+  background:radial-gradient(120% 56% at 50% 46%,rgba(255,255,255,.22),transparent 64%),linear-gradient(172deg,var(--g1),var(--g2))}
+.splash p{margin:0;padding:0 20px;font-family:var(--font-mood);font-weight:800;font-variation-settings:"SOFT" 100,"WONK" 0;font-size:clamp(42px,13.5vw,60px);line-height:1.05;text-align:center;animation:splIn .9s cubic-bezier(.3,1.4,.5,1) backwards}
+@keyframes splIn{from{opacity:0;transform:translateY(18px) scale(.9)}}
+.splash.bye{opacity:0;pointer-events:none}
+/* time and place, shown once the log is done */
+.notif{position:absolute;left:50%;top:176px;z-index:8;transform:translate(-50%,-10px);display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(var(--fg),.5);border-radius:22px;padding:8px 16px;color:rgb(var(--fg));cursor:pointer;white-space:nowrap;
+  background:rgba(var(--fg),.18);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);font-weight:300;font-size:13.5px;letter-spacing:.06em;opacity:0;pointer-events:none;transition:opacity .35s,transform .35s}
+.notif svg{width:13px;height:13px;flex:none}
+.nfx{display:grid;text-align:left;line-height:1.3}
+.nfx small{font-size:11.5px;opacity:.88;font-variant-numeric:tabular-nums;letter-spacing:.03em}
+.geoline{margin:0 0 10px;display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;font-weight:300;font-size:14.5px;font-variant-numeric:tabular-nums}
+.geoline svg{width:13px;height:13px;flex:none}
+.geoline a{color:inherit;font-weight:400;white-space:nowrap}
+.notif.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+
+/* little blob faces for the exact feelings */
+@keyframes bob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-5px) rotate(2deg)}}
+@keyframes fpop{0%{transform:scale(1)}40%{transform:scale(1.3) rotate(-9deg)}70%{transform:scale(.94) rotate(6deg)}100%{transform:scale(1)}}
+@keyframes wIn{from{opacity:0;transform:scale(.15) translateY(-46px)}to{opacity:1;transform:none}}
+.cores{display:flex;justify-content:center;gap:4px}
+.fc{--i:0;border:0;background:none;color:rgb(var(--fg));display:grid;justify-items:center;gap:0;cursor:pointer;padding:4px 2px;font-weight:400;font-size:13px;letter-spacing:.02em;min-width:0;transition:transform .35s cubic-bezier(.3,1.6,.5,1),opacity .25s}
+.fc svg{width:min(80px,21vw);height:min(80px,21vw);overflow:visible;animation:bob 3.2s ease-in-out infinite;animation-delay:calc(var(--i) * -.75s)}
+.fb{fill:#fff;fill-opacity:var(--bo,.16)}
+.fb2{fill-opacity:calc(var(--bo,.16) * .62)}
+.bl{fill:#fff}
+/* every blob face is drawn in white only */
+#face,.fc svg,.eface svg{color:#fff}
+.ft{filter:var(--ftf,none)}
+.fc .fb{transition:fill-opacity .25s}
+.fc.on{transform:scale(1.1)}
+.fc.on .fb{fill-opacity:calc(var(--bo,.16) + .22)}
+.fc.on svg{filter:drop-shadow(0 0 10px rgba(var(--fg),.6))}
+.fc.pop svg{animation:fpop .5s cubic-bezier(.3,1.6,.5,1)}
+.cores.has .fc:not(.on){opacity:.5;transform:scale(.84)}
+.words{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 10px;min-height:270px;align-content:start}
+.words .fc{font-size:15px;animation:wIn .5s cubic-bezier(.3,1.6,.5,1) backwards;animation-delay:calc(var(--i) * 80ms)}
+.words .fc svg{width:min(104px,26vw);height:min(104px,26vw)}
+.words.has .fc:not(.on){opacity:.55}
+.words-hint{grid-column:1/-1;margin:0;text-align:center;font-weight:300;font-size:14px;opacity:.8;padding-top:34px}
+.eface{display:grid;place-items:center;margin-bottom:-10px}
+.eface svg{width:120px;height:120px;overflow:visible;animation:bob 3.4s ease-in-out infinite}
+.icons.static .ib{opacity:1;pointer-events:auto;transform:none}
+.icons.static{justify-content:center;margin-top:4px}
+.equote{margin:0;text-align:center;font-weight:300;font-size:15px;font-style:italic;opacity:.92;overflow-wrap:anywhere}
+
+/* the conversation: her face sits to the left of everything she says */
+.sh.chat{padding-bottom:158px;gap:10px}
+@keyframes think{from{transform:rotate(-7deg)}to{transform:rotate(7deg) translateY(-2px)}}
+.profhead{flex:1;margin:0;text-align:center;font-weight:400;font-size:14.5px;letter-spacing:.04em;line-height:1.25}
+.profhead.big{font-weight:500;font-size:19px;letter-spacing:.01em}
+.profhead small{display:block;font-weight:300;font-size:10px;letter-spacing:.14em;text-transform:uppercase;opacity:.85}
+.brow{display:flex;align-items:flex-end;gap:8px;align-self:flex-start;max-width:94%}
+.brow .av{flex:none;width:48px;height:48px;border-radius:50%;overflow:hidden;animation:msgIn .36s cubic-bezier(.3,1.5,.5,1) backwards}
+.brow .av svg{display:block;width:100%;height:100%}
+.brow .msg{max-width:none}
+.brow.now .av{animation:none}
+.brow.think .av{animation:think .8s ease-in-out infinite alternate}
+.quick.big{flex-wrap:wrap;justify-content:center;gap:8px}
+.quick.big button{font-size:15.5px;padding:12px 18px;background:rgba(var(--fg),.2)}
+.msgs{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+@keyframes msgIn{from{opacity:0;transform:scale(.6) translateY(10px)}to{opacity:1;transform:none}}
+.msg{max-width:84%;padding:10px 15px;border-radius:20px;font-weight:300;font-size:16px;line-height:1.35;overflow-wrap:anywhere;animation:msgIn .36s cubic-bezier(.3,1.5,.5,1) backwards}
+.msg.bot{align-self:flex-start;background:rgba(var(--fg),.2);border-bottom-left-radius:6px;transform-origin:0 100%}
+.msg.me{align-self:flex-end;background:rgb(var(--fg));color:rgb(var(--inv));border:0;border-bottom-right-radius:6px;font-weight:400;cursor:pointer;text-align:left;transform-origin:100% 100%}
+.msg.me::after{content:"×";margin-left:8px;opacity:.35;font-weight:300}
+.msg.now{animation:none}
+.typing i{display:inline-block;width:6px;height:6px;border-radius:50%;background:rgb(var(--fg));margin:0 2px;animation:td 1s ease-in-out infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes td{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-5px);opacity:1}}
+.chatdock{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:min(430px,100%);z-index:2;display:grid;gap:8px;padding:18px max(18px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));background:linear-gradient(to bottom,transparent,rgba(0,0,0,.16) 38%)}
+.quick{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-inline:-4px;padding-inline:4px}
+.quick::-webkit-scrollbar{display:none}
+.quick button{flex:none;border:1px solid rgba(var(--fg),.5);background:rgba(var(--fg),.12);border-radius:999px;padding:7px 13px;font-weight:300;font-size:13.5px;white-space:nowrap;cursor:pointer}
+.chatbar{display:flex;gap:8px}
+.chatbar input{flex:1;min-width:0;border:0;border-radius:999px;padding:13px 18px;background:rgba(var(--fg),.24);color:rgb(var(--fg));font-size:16px;font-weight:300}
+.chatbar input::placeholder{color:rgba(var(--fg),.75)}
+.chatbar input:focus{outline:2px solid rgb(var(--fg))}
+.chatbar button{width:48px;height:48px;flex:none;border-radius:50%;border:0;background:rgb(var(--fg));color:rgb(var(--inv));display:grid;place-items:center;cursor:pointer}
+.textbtn{background:none;border:0;font-weight:400;font-size:14px;letter-spacing:.08em;cursor:pointer;padding:8px 6px}
+
+/* the exact feeling: branches grow from the face you picked to its closer feelings */
+.branch{height:44px;margin:-10px 0 -12px}
+.branch svg{display:block;width:100%;height:100%;overflow:visible}
+.branch path{fill:none;stroke:rgb(var(--fg));stroke-opacity:.75;stroke-width:1.6;stroke-linecap:round;stroke-dasharray:1;animation:brDraw .55s ease-out backwards}
+@keyframes brDraw{from{stroke-dashoffset:1}}
+.justcore{grid-column:1/-1;justify-self:center;margin-top:8px;border:1px dashed rgba(var(--fg),.65);background:none;border-radius:999px;padding:9px 18px;font-weight:300;font-size:14.5px;cursor:pointer;animation:wIn .5s cubic-bezier(.3,1.6,.5,1) .36s backwards}
+/* back to center: one piece of advice with a picture */
+.calmart{display:grid;place-items:center;margin-top:4px}
+.calmart svg{width:min(250px,64vw);height:auto;overflow:visible}
+.calmart .ln{fill:none;stroke:rgb(var(--fg));stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.calmart .sf{fill:#fff;fill-opacity:calc(var(--bo,.16) + .04)}
+.calmart .wf{fill:rgb(var(--fg))}
+.calmart text{font-family:var(--font-display);fill:rgb(var(--fg));font-weight:400}
+.calmart .an{transform-box:fill-box;transform-origin:center}
+@keyframes cDrip{0%{transform:translateY(-10px);opacity:0}25%{opacity:1}100%{transform:translateY(18px);opacity:0}}
+.calmart .dr{animation:cDrip 1.9s ease-in infinite;animation-delay:var(--d,0s)}
+@keyframes cBreath{0%{transform:scale(.45)}33.3%{transform:scale(1)}100%{transform:scale(.45)}}
+.calmart .br{animation:cBreath 12s ease-in-out infinite}
+@keyframes cIn{0%,30%{opacity:1}36%,97%{opacity:0}100%{opacity:1}}
+@keyframes cOut{0%,30%{opacity:0}36%,97%{opacity:1}100%{opacity:0}}
+.calmart .tin{animation:cIn 12s linear infinite}
+.calmart .tout{opacity:0;animation:cOut 12s linear infinite}
+@keyframes cStep{0%,100%{opacity:.18}40%,60%{opacity:1}}
+.calmart .ft{animation:cStep 3s ease-in-out infinite;animation-delay:var(--d,0s)}
+@keyframes cSway{from{transform:translateX(-7px)}to{transform:translateX(7px)}}
+.calmart .wv{animation:cSway 3.2s ease-in-out infinite alternate;animation-delay:var(--d,0s)}
+@keyframes cRip{0%{opacity:.1}45%{opacity:.95}100%{opacity:.1}}
+.calmart .rp{animation:cRip 3s ease-in-out infinite;animation-delay:var(--d,0s)}
+@keyframes cBeat{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+.calmart .hb{animation:cBeat 2.4s ease-in-out infinite}
+.calmhow{font-size:16px;line-height:1.5;text-wrap:balance;max-width:330px;margin:0 auto}
+.calmwhy{margin:0 auto;max-width:320px;text-align:center;font-weight:300;font-size:13px;line-height:1.45;opacity:.85;text-wrap:balance}
+
+.fly{position:fixed;z-index:50;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:rgb(var(--fg));box-shadow:0 0 18px 4px rgba(var(--fg),.6);pointer-events:none}
+
+/* sheets: elaborate, comment, place, an earlier feeling, the places map */
+.sheet{position:fixed;inset:0;z-index:40;display:grid;justify-items:center;background:var(--stage)}
+.sh{--g1:#7A5E06;--g2:#C29A1E;position:relative;width:min(430px,100%);height:100%;overflow-y:auto;overscroll-behavior:contain;color:rgb(var(--fg));display:flex;flex-direction:column;gap:14px;
+  background:radial-gradient(120% 60% at 50% 22%,rgba(255,255,255,.2),transparent 62%),linear-gradient(172deg,var(--g1),var(--g2));
+  padding:10px max(18px, env(safe-area-inset-right, 0px)) 112px max(18px, env(safe-area-inset-left, 0px));animation:shIn .3s cubic-bezier(.3,.7,.2,1)}
+@keyframes shIn{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+.sh.plain{background:var(--bg);color:var(--ink);font-family:var(--font-body)}
+.sh-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.x{width:38px;height:38px;border-radius:50%;border:0;background:rgba(var(--fg),.2);cursor:pointer;display:grid;place-items:center;flex:none}
+.plain .x{background:var(--track)}
+.when{display:inline-flex;align-items:center;gap:8px;font-weight:300;font-size:13.5px;letter-spacing:.06em}
+.when input{border:0;background:rgba(0,0,0,.18);color:rgb(var(--fg));border-radius:999px;padding:4px 9px;color-scheme:dark;font-weight:400}
+.sh h2{font-weight:300;font-size:clamp(26px,7.6vw,32px);letter-spacing:-.01em;line-height:1.12;margin:6px 0 0;text-align:center;text-wrap:balance}
+.sh h2.big{font-family:var(--font-mood);font-weight:800;font-variation-settings:"SOFT" 100,"WONK" 0;font-size:clamp(36px,11vw,48px);letter-spacing:.015em;text-transform:uppercase}
+.sub{margin:0;text-align:center;font-weight:300;font-size:14px;opacity:.9}
+.sub b{font-weight:500}
+.sec-h{margin:8px 0 0;font-weight:300;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;opacity:.8}
+.pick{min-height:36px;display:flex;justify-content:center;align-items:center;font-weight:300;font-size:14px}
+.pick .pc{background:rgb(var(--fg));color:rgb(var(--inv));border-radius:999px;padding:6px 16px;font-weight:500;font-size:16px}
+.pick span.h{opacity:.85}
+.wheel svg{display:block;width:100%;height:auto;overflow:visible}
+.wheel .sec{fill:rgba(var(--fg),.2);stroke:rgba(var(--fg),.6);stroke-width:1;cursor:pointer;transition:fill .15s}
+.wheel .sec:hover{fill:rgba(var(--fg),.36)}
+.wheel .sec.on{fill:rgb(var(--fg))}
+.wheel .sec.dim{fill:rgba(var(--fg),.08)}
+.wheel .ghostsec{fill:rgba(var(--fg),.06);stroke:rgba(var(--fg),.3);stroke-dasharray:3 4}
+.wheel text{font-family:var(--font-display);fill:rgb(var(--fg));pointer-events:none;font-weight:400;font-size:11.5px}
+.wheel text.ct{font-weight:500;font-size:12.5px}
+.wheel svg.four text.ct{font-size:10.5px}
+.wheel text.on{fill:#151924}
+.wheel text.dim{opacity:.6}
+.wheel text.hintt{font-weight:300;font-size:12.5px;opacity:.85}
+.sh textarea{width:100%;border:0;border-radius:18px;padding:14px 16px;background:rgba(var(--fg),.2);color:rgb(var(--fg));resize:vertical;min-height:110px;font-size:16px;font-weight:300}
+.sh textarea::placeholder{color:rgba(var(--fg),.75)}
+.sh textarea:focus{outline:2px solid rgb(var(--fg))}
+.opts{display:flex;flex-wrap:wrap;gap:7px}
+.opts button{border:1px solid rgba(var(--fg),.5);background:transparent;border-radius:999px;padding:7px 13px;font-weight:400;font-size:13.5px;cursor:pointer}
+.opts button.sug{border-style:dashed;font-weight:300;opacity:.9}
+.opts button[aria-pressed="true"]{background:rgb(var(--fg));color:rgb(var(--inv));border-color:rgb(var(--fg))}
+.newplace{display:flex;gap:6px}
+.newplace input{flex:1;min-width:0;border:0;border-radius:999px;padding:9px 14px;background:rgba(var(--fg),.2);color:rgb(var(--fg));font-weight:300}
+.newplace input::placeholder{color:rgba(var(--fg),.75)}
+.newplace button{border:0;border-radius:999px;padding:9px 16px;background:rgb(var(--fg));color:rgb(var(--inv));font-weight:500;cursor:pointer}
+.sh-actions{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:min(430px,100%);display:flex;gap:10px;z-index:2;padding:16px max(18px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));background:linear-gradient(to bottom,transparent,rgba(0,0,0,.14) 45%)}
+.plain .sh-actions{background:linear-gradient(to bottom,transparent,var(--bg) 45%)}
+.btn{flex:1;border:0;border-radius:999px;padding:16px;font-weight:500;font-size:17px;cursor:pointer;transition:transform .12s}
+.btn:active{transform:scale(.98)}
+.btn.w{background:rgb(var(--fg));color:rgb(var(--inv));box-shadow:0 10px 28px rgba(0,0,0,.24)}
+.btn.g{background:rgba(var(--fg),.22);color:rgb(var(--fg));flex:0 0 auto;padding-inline:22px}
+.plain .btn.w{background:var(--ink);color:var(--bg)}
+
+/* places map (plain sheet) */
+.plain h2{font-family:var(--font-display);font-weight:400}
+.seg{display:inline-flex;align-self:center;background:var(--track);border-radius:999px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;border-radius:999px;padding:6px 14px;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.mapcard{background:var(--surface);border-radius:22px;box-shadow:var(--shadow);padding:10px 6px}
+.map svg{display:block;width:100%;height:auto;overflow:visible}
+.map .link{stroke:var(--hatch);stroke-width:1.2}
+.map .trail{fill:none;stroke:var(--hatch);stroke-width:1.5;stroke-dasharray:2 6;stroke-linecap:round}
+.map .hub{fill:var(--bg);stroke:var(--ink);stroke-width:2}
+.map .pin{fill:var(--ink)}
+.map .pn{font-family:var(--font-body);font-size:13px;font-weight:700;fill:var(--ink)}
+.map .pc{font-family:var(--font-body);font-size:11px;font-weight:600;fill:var(--muted)}
+.map .mdot{stroke:var(--surface);stroke-width:2;cursor:pointer}
+.map svg.demo{opacity:.5;pointer-events:none}
+.map-note{margin:4px 10px 0;font-size:12.5px;color:var(--muted);text-align:center}
+.map-note b{color:var(--ink)}
+.spots{display:grid;gap:8px}
+.spot{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:11px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center}
+.spot b{font-weight:700;font-size:14.5px}
+.spot b i{font-style:normal;font-weight:600;font-size:11px;color:var(--muted);margin-left:4px}
+.spot .co{grid-column:1;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.spot > a,.spot > button{grid-column:2;grid-row:1/3;font:inherit;font-weight:700;font-size:13px;color:var(--ink);background:var(--track);border:0;border-radius:999px;padding:8px 13px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.spot > button.lnk{grid-column:1;grid-row:auto;justify-self:start;background:none;padding:2px 0;font-weight:600;font-size:12.5px;color:var(--muted);text-decoration:underline}
+.spotform{grid-column:1/-1;display:flex;gap:6px;margin-top:8px}
+.spotform input{flex:1;min-width:0;border:1px solid var(--line);border-radius:999px;padding:9px 13px;background:var(--bg);color:var(--ink);font-size:16px}
+.spotform button{border:0;border-radius:999px;padding:9px 16px;background:var(--ink);color:var(--bg);font-weight:700;cursor:pointer}
+
+.infobox{position:fixed;z-index:60;max-width:min(270px,calc(100vw - 24px));background:#151924;color:#fff;border-radius:12px;padding:9px 12px;font-family:var(--font-body);font-size:13px;line-height:1.4;box-shadow:0 10px 30px rgba(0,0,0,.35);pointer-events:none;display:grid;gap:2px}
+.infobox b{font-weight:700}
+.infobox q{font-style:italic;overflow-wrap:anywhere}
+.infobox small{opacity:.7}
+.toast{position:fixed;left:50%;top:calc(46px + env(safe-area-inset-top, 0px));transform:translate(-50%,-10px);opacity:0;background:rgba(21,25,36,.86);color:#fff;padding:10px 18px;border-radius:999px;font-weight:300;font-size:13.5px;letter-spacing:.04em;transition:opacity .25s,transform .25s;pointer-events:none;z-index:70;max-width:calc(100% - 32px);text-align:center;white-space:nowrap}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media (max-height:600px){
+  .am{font-size:15px;line-height:1.5}.app.noticed .affirm{padding:12px 20px 0}.app.noticed .word{margin-top:6px}.wd{font-size:26px}.app.noticed #face{width:74px;height:74px}.tb{padding-top:9px;padding-bottom:9px} .vscale span{display:none} .vscale{top:16%;bottom:16%} .chart{min-height:96px} .ib{width:48px;height:48px} .word{font-size:30px} .okb{width:50px;height:50px} }
+.app.dashOpen:not(.noticed) #face{width:min(200px,54vw,19vh);height:min(200px,54vw,19vh)}
+.app.dashOpen .hint{display:none}
+@media (max-height:600px){.app.dashOpen:not(.noticed) #face{width:min(54vw,17vh);height:min(54vw,17vh)}.app.dashOpen .word{font-size:26px}.under{margin-top:8px}}
+@media (max-width:359px){.tg button{letter-spacing:.08em;padding:6px 3px 4px;margin:0 1px;font-size:11px}.daylabel{letter-spacing:.08em;font-size:11.5px;padding-inline:2px}.pinbtn{width:28px;height:28px}.tools{gap:4px}.chev{width:18px}.cw{display:none}.tb{font-size:13.5px;padding:9px 12px 9px 10px;gap:8px}.tb svg{width:20px;height:20px}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}.wd{display:none}}
+.actions{padding-inline:4px;padding-bottom:6px}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/figtree-latin-ext-0.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/figtree-latin-1.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(fonts/figtree-latin-ext-0.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(fonts/figtree-latin-1.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(fonts/figtree-latin-ext-0.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(fonts/figtree-latin-1.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(fonts/figtree-latin-ext-0.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(fonts/figtree-latin-1.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 600 900;
+  font-display: swap;
+  src: url(fonts/fraunces-latin-ext-0.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 600 900;
+  font-display: swap;
+  src: url(fonts/fraunces-latin-1.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 200;
+  font-display: swap;
+  src: url(fonts/outfit-latin-ext-0.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 200;
+  font-display: swap;
+  src: url(fonts/outfit-latin-1.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url(fonts/outfit-latin-ext-0.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url(fonts/outfit-latin-1.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/outfit-latin-ext-0.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/outfit-latin-1.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(fonts/outfit-latin-ext-0.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(fonts/outfit-latin-1.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(fonts/outfit-latin-ext-0.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(fonts/outfit-latin-1.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---- the public web version ---- */
+html,body{height:100%;background:#000;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+input,textarea{-webkit-user-select:text;user-select:text}
+.app{padding-top:max(8px, env(safe-area-inset-top, 0px));padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px))}
+.sh{padding-top:calc(10px + env(safe-area-inset-top, 0px))}
+.sh.wrapsh{padding-top:env(safe-area-inset-top, 0px)}
+@media (min-width:600px){.app{box-shadow:0 0 0 1px rgba(255,255,255,.06),0 30px 80px rgba(0,0,0,.6)}}
+</style>
+
+<div class="app" id="app">
+  <header>
+    <div class="dash" id="dash" inert><div class="dash-in" id="dashIn">
+    <div class="top-row">
+      <div class="daynav">
+        <button type="button" class="chev" id="prev" aria-label="Previous day"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="daylabel" id="dayLabel">today</button>
+        <button type="button" class="chev" id="next" aria-label="Next day"><svg width="12" height="12" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <div class="tools">
+        <div class="tg" id="scopeTg" role="group" aria-label="Range"><button type="button" data-scope="day" aria-pressed="true">day</button><button type="button" data-scope="week" aria-pressed="false">week</button></div>
+        <button type="button" class="pinbtn" id="pinBtn" aria-label="Places: where you felt what"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5a4.6 4.6 0 0 0-4.6 4.6C3.4 9.6 8 14.5 8 14.5s4.6-4.9 4.6-8.4A4.6 4.6 0 0 0 8 1.5zm0 6.3a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z"/></svg></button>
+      </div>
+    </div>
+    <div class="chart" id="chart"></div>
+    <button type="button" class="exnote" id="exNote" hidden>example feelings · tap to clear</button>
+    <div class="under"><div class="checks" id="checks" role="img"></div><div class="wkwraps" id="wkWraps" hidden></div><button type="button" class="wrapbtn" id="wrapBtn" hidden></button></div>
+    </div></div>
+    <div class="pull" id="pull">
+      <button type="button" class="tab" id="dashTab" aria-expanded="false" aria-controls="dash" aria-label="Show your curve"><svg viewBox="0 0 54 16" aria-hidden="true"><path d="M5 4 27 12 49 4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+  </header>
+
+  <main class="temp" id="temp" role="slider" tabindex="0" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="6" aria-label="How you feel right now, from awful up to wonderful">
+    <button type="button" class="mkb r" id="crownBtn" aria-pressed="false" aria-label="Mark this as the highlight of the day"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M2.6 8.2 7.2 11.8 12 4.6l4.8 7.2 4.6-3.6-1.7 9.3H4.3zM4.6 19h14.8v2H4.6z"/></svg><span>highlight</span></button>
+    <button type="button" class="mkb" id="skullBtn" aria-pressed="false" aria-label="Mark this as the low point of the day"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M12 2.5C7.3 2.5 3.5 6 3.5 10.6c0 2.6 1.2 4.7 3 6.1v2.8c0 .8.7 1.5 1.5 1.5h8c.8 0 1.5-.7 1.5-1.5v-2.8c1.8-1.4 3-3.5 3-6.1C20.5 6 16.7 2.5 12 2.5zM8.8 9a2.1 2.1 0 1 0 0 4.2 2.1 2.1 0 0 0 0-4.2zM15.2 9a2.1 2.1 0 1 0 0 4.2 2.1 2.1 0 0 0 0-4.2zM12 14l-1.3 2.3h2.6zM9.6 18.4v2.6h1v-2.6zM13.4 18.4v2.6h1v-2.6z"/></svg><span>low point</span></button>
+    <div class="facewrap">
+      <svg id="face" viewBox="-100 -100 200 200" aria-hidden="true">
+        <path id="fBody" class="fb"/><path id="fBody2" class="fb fb2"/>
+        <circle id="fCL" class="bl" cx="-45" cy="14" r="11"/><circle id="fCR" class="bl" cx="45" cy="14" r="11"/>
+        <g class="ft">
+        <g fill="currentColor"><ellipse id="fEL" rx="9"/><ellipse id="fER" rx="9"/></g>
+        <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path id="fAL" stroke-width="5.5"/><path id="fAR" stroke-width="5.5"/><path id="fBL" stroke-width="3.6"/><path id="fBR" stroke-width="3.6"/>
+          <path id="fNose" stroke-width="3.2" opacity=".7"/><path id="fDim" stroke-width="3"/>
+          <path id="fMouth" stroke-width="5.5" fill="currentColor"/>
+          <circle id="fSigh" r="3" stroke-width="2.2"/><circle id="fSigh2" r="3" stroke-width="2.2"/></g>
+        <g id="fNote"><ellipse rx="4.6" ry="3.4" transform="rotate(-18)" fill="currentColor"/><path d="M4.2 -1.2V-17l9 3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+        <g fill="currentColor">
+          <path id="fTear" d="M41 8c4 6 5.5 8 5.5 11a5.5 5.5 0 0 1-11 0c0-3 1.5-5 5.5-11z"/><path id="fTearL" d="M-41 8c4 6 5.5 8 5.5 11a5.5 5.5 0 0 1-11 0c0-3 1.5-5 5.5-11z"/>
+          <path id="fSweat" d="M0 0c2.8 4.2 3.8 5.6 3.8 7.6a3.8 3.8 0 0 1-7.6 0c0-2 1-3.4 3.8-7.6z"/>
+          <path id="fS1" d="M0 -9Q0 0 9 0Q0 0 0 9Q0 0 -9 0Q0 0 0 -9Z"/><path id="fS2" d="M0 -9Q0 0 9 0Q0 0 0 9Q0 0 -9 0Q0 0 0 -9Z"/><path id="fS3" d="M0 -9Q0 0 9 0Q0 0 0 9Q0 0 -9 0Q0 0 0 -9Z"/>
+          <path id="fH1" d="M0 6.7C-10.5 -1 -4.2 -8.8 0 -2.1C4.2 -8.8 10.5 -1 0 6.7Z"/><path id="fH2" d="M0 6.7C-10.5 -1 -4.2 -8.8 0 -2.1C4.2 -8.8 10.5 -1 0 6.7Z"/></g>
+        </g>
+      </svg>
+      <p class="word" id="word"></p>
+      <p class="detail" id="detail"></p>
+      <div class="affirm" id="affirm" aria-live="polite">
+        <p class="wd">Noticed!<i style="--dx:-74px;--dy:-26px;--s:1.3">✦</i><i style="--dx:78px;--dy:-22px;--s:1.1">✦</i><i style="--dx:-52px;--dy:24px;--s:.8">✦</i><i style="--dx:58px;--dy:26px;--s:.9">✦</i><i style="--dx:-12px;--dy:-38px;--s:.7">✦</i><i style="--dx:20px;--dy:36px;--s:.6">✦</i></p>
+        <p class="am" id="amText"></p>
+      </div>
+    </div>
+    <div class="vscale" aria-hidden="true"><div class="vs-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><b id="mark"></b></div></div>
+    <p class="hint" id="hint">swipe, then let go</p>
+  </main>
+
+  <footer class="actions" id="actions">
+    <div class="slot">
+      <div class="tune" id="tune">
+        <button type="button" class="tb helpt" id="helpBtn" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path class="f" d="M6 1.5h4V6h4.5v4H10v4.5H6V10H1.5V6H6z"/></svg><span>Help me get back to center</span></button>
+        <button type="button" class="tb" id="palBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/><path d="M14.8 10.4l5-2.9M14.8 13.6l5 2.9M12 15.2V21M9.2 13.6l-5 2.9M9.2 10.4l-5-2.9"/><path class="f" d="M12 8.8V3a9 9 0 0 1 7.8 4.5l-5 2.9A3.2 3.2 0 0 0 12 8.8z"/></svg><span>Tap on the exact feeling?</span></button>
+        <button type="button" class="tb" id="noteBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5a8.5 8.5 0 0 1-12.6 7.4L3.5 20l1.2-4.2A8.5 8.5 0 1 1 20.5 11.5z"/></svg><span>Add what caused this feeling?</span></button>
+        <button type="button" class="okb" id="okBtn" aria-label="Done. Finish this check-in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.6 4.6L19 7.5"/></svg></button>
+      </div>
+    </div>
+  </footer>
+  <button type="button" class="notif" id="notif" aria-live="polite"></button>
+  <div class="splash" id="splash"><p>Howdy Dani?</p></div>
+  <div class="noted" id="noted" hidden aria-live="assertive"><canvas id="ndFx" aria-hidden="true"></canvas><div class="ndc"><div class="ndmk" id="ndMark"><svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="34" pathLength="1"/><path d="M25.5 41.5 36 52l19-22" pathLength="1"/></svg></div><p class="nt" id="ndWord" aria-label="Noted!"></p><svg class="ndline" viewBox="0 0 230 14" aria-hidden="true"><path d="M4 9C46 2 92 13 138 6s64 3 88-2" pathLength="1"/></svg><p class="nm">Great, You just became aware. That’s the practice itself! See you at the next emotion.</p><div class="ndchecks" id="ndChecks"></div></div></div>
+</div>
+<div class="sheet" id="sheet" hidden></div>
+<div class="infobox" id="infobox" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pad = n => String(n).padStart(2,'0');
+/* the heat scale: deep rose-red at the bottom, through orange and gold, up to emerald; deep enough that white reads on all of it */
+const LV = [
+  {name:'Awful', color:'#E0245E', c:['#7A0F3A','#DE2A5C']},
+  {name:'Bad', color:'#F0522D', c:['#A3220F','#EE5630']},
+  {name:'Low', color:'#F58A1F', c:['#AE4C06','#EE8A24']},
+  {name:'Okay', color:'#E9BD12', c:['#876800','#D2A412']},
+  {name:'Good', color:'#9CC42A', c:['#507A0A','#8DB826']},
+  {name:'Great', color:'#42B955', c:['#1F7A2E','#42B655']},
+  {name:'Wonderful', color:'#13B87A', c:['#087048','#14B67A']},
+];
+/* the slice of the emotion wheel that belongs to each mood level: core feelings, each with four more exact words */
+const WHEEL = [
+  [['Furious',['Enraged','Hostile','Betrayed','Hateful']],['Terrified',['Panicked','Helpless','Trapped','Dread']],['Despair',['Hopeless','Heartbroken','Worthless','Grieving']],['Ashamed',['Humiliated','Disgusted','Exposed','Small']]],
+  [['Angry',['Frustrated','Annoyed','Resentful','Bitter']],['Anxious',['Worried','Overwhelmed','Stressed','Insecure']],['Sad',['Hurt','Rejected','Guilty','Empty']]],
+  [['Tired',['Sluggish','Weary','Sleepy','Drained']],['Uneasy',['Tense','Impatient','Irritable','Nervous']],['Down',['Disappointed','Lonely','Gloomy','Discouraged']]],
+  [['Numb',['Flat','Detached','Apathetic','Blank']],['Bored',['Restless','Unmotivated','Distracted','Idle']],['Unsure',['Confused','Hesitant','Mixed','Torn']]],
+  [['Peaceful',['Calm','Content','Relaxed','Relieved']],['Curious',['Intrigued','Focused','Engaged','Open']],['Steady',['Comfortable','Safe','Rested','Okay']]],
+  [['Happy',['Cheerful','Playful','Delighted','Amused']],['Proud',['Confident','Capable','Respected','Accomplished']],['Loved',['Grateful','Appreciated','Included','Cared for']],['Excited',['Eager','Inspired','Energized','Hopeful']]],
+  [['Joyful',['Ecstatic','Elated','Euphoric','Blissful']],['Adored',['Cherished','In love','Moved','Seen']],['Powerful',['Triumphant','Unstoppable','Fearless','Free']]],
+];
+/* an expression for every feeling on the wheel: "eyes brows mouth extras" */
+const FACE = {
+  Furious:'line angry teeth steam', Enraged:'x angry wail steam', Hostile:'side angry frown -', Betrayed:'big worried frown tear', Hateful:'line angry frown bolt',
+  Terrified:'big worried O sweat', Panicked:'ring worried wail sweat', Helpless:'low worried smallfrown tears', Trapped:'side worried teeth sweat', Dread:'big worried wavy cloud',
+  Despair:'low worried frown tears', Hopeless:'line worried frown cloud', Heartbroken:'low worried wail tears', Worthless:'half - smallfrown tear', Grieving:'low worried wavy tears',
+  Ashamed:'side worried wavy blush', Humiliated:'low worried wavy blush+sweat', Disgusted:'line angry wavy -', Exposed:'big worried o blush', Small:'dot worried smallfrown -',
+  Angry:'dot angry frown steam', Frustrated:'line angry teeth -', Annoyed:'half flat flat -', Resentful:'side angry frown -', Bitter:'line angry wavy -',
+  Anxious:'big worried wavy sweat', Worried:'dot worried smallfrown -', Overwhelmed:'ring worried O sweat', Stressed:'line worried teeth sweat', Insecure:'side worried small -',
+  Sad:'dot worried frown tear', Hurt:'low worried frown tear', Rejected:'side worried frown -', Guilty:'low worried wavy sweat', Empty:'ring - flat -',
+  Tired:'half - flat zzz', Sluggish:'half - wavy -', Weary:'low worried flat -', Sleepy:'low - o zzz', Drained:'line worried smallfrown sweat',
+  Uneasy:'side worried wavy -', Tense:'dot flat teeth -', Impatient:'side angry flat dots', Irritable:'line angry smallfrown -', Nervous:'big worried wavy sweat',
+  Down:'dot worried smallfrown cloud', Disappointed:'low worried frown -', Lonely:'side worried smallfrown -', Gloomy:'half - frown cloud', Discouraged:'low worried flat -',
+  Numb:'ring - flat -', Flat:'line - flat -', Detached:'side - flat -', Apathetic:'half - flat -', Blank:'dot - flat dots',
+  Bored:'half flat flat dots', Restless:'side raised wavy -', Unmotivated:'half - smallfrown -', Distracted:'side - o -', Idle:'low - flat zzz',
+  Unsure:'dot one wavy q', Confused:'ring one o q', Hesitant:'side worried flat dots', Mixed:'dot one smirk -', Torn:'side worried wavy q',
+  Peaceful:'low - small -', Calm:'low - smile -', Content:'arc - small blush', Relaxed:'low - bigsmile -', Relieved:'arc raised o sweat',
+  Curious:'big one small q', Intrigued:'side raised smirk q', Focused:'line flat flat -', Engaged:'big raised smile spark', Open:'dot raised smile -',
+  Steady:'dot - small -', Comfortable:'arc - small -', Safe:'low - smile heart', Rested:'arc - smile spark', Okay:'dot - smile -',
+  Happy:'arc - bigsmile blush', Cheerful:'arc raised grin -', Playful:'wink one smirk spark', Delighted:'star raised grin -', Amused:'arc - smirk -',
+  Proud:'arc raised smirk spark', Confident:'dot raised smirk -', Capable:'dot flat smile spark', Respected:'low - smile -', Accomplished:'arc raised grin spark',
+  Loved:'heart - smile blush', Grateful:'low - smile heart', Appreciated:'arc - smile heart', Included:'dot raised bigsmile blush', 'Cared for':'low - small heart+blush',
+  Excited:'star raised grin spark', Eager:'big raised bigsmile -', Inspired:'big raised o spark', Energized:'dot raised grin bolt', Hopeful:'big raised smile spark',
+  Joyful:'arc raised grin spark', Ecstatic:'star raised grin spark', Elated:'arc raised grin blush', Euphoric:'star - grin heart', Blissful:'low - bigsmile blush',
+  Adored:'heart raised bigsmile blush', Cherished:'low - smile heart+blush', 'In love':'heart - grin heart', Moved:'big worried smile tear', Seen:'big raised smile spark',
+  Powerful:'dot angry smirk bolt', Triumphant:'arc raised grin spark', Unstoppable:'line angry grin bolt', Fearless:'dot flat smirk -', Free:'arc raised bigsmile spark',
+};
+const LVFACE = ['low worried wail tears','dot worried frown -','dot worried smallfrown -','dot - small -','dot - smile -','arc - smile blush','arc raised grin spark'];
+/* draws one small blob face, in the same style as the big one: a soft translucent body with white features */
+function miniFace(name, lv, seed){
+  const [eyes, brows, mouth, extra] = (FACE[name] || LVFACE[lv]).split(' ');
+  const t = (lv-3)/3, neg = Math.max(0,-t), posi = Math.max(0,t), ey = -6 + 2*neg, by = ey - 11, my = 13 + 2*neg;
+  const S = (d, w) => `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${w || 3}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const body = (R, off) => { let d = ''; const N = 48, sx = 1 + 0.06*neg;
+    for(let i=0;i<=N;i++){ const th = i/N*2*Math.PI, sn = Math.sin(th), r = R*(1 + 0.05*Math.sin(3*th + seed*1.9 + off) + 0.035*Math.sin(5*th + seed*0.7 + off));
+      d += (i ? 'L' : 'M') + (r*Math.cos(th)*sx).toFixed(1) + ' ' + (r*sn*(sn < 0 ? 1 - 0.12*neg + 0.04*posi : 1) + 2*neg).toFixed(1); }
+    return d + 'Z'; };
+  const star = (cx, cy, r) => `<path d="M${cx} ${cy-r}Q${cx} ${cy} ${cx+r} ${cy}Q${cx} ${cy} ${cx} ${cy+r}Q${cx} ${cy} ${cx-r} ${cy}Q${cx} ${cy} ${cx} ${cy-r}Z" fill="currentColor"/>`;
+  const heart = (cx, cy, s) => `<path d="M${cx} ${cy+s*0.95}C${cx-s*1.5} ${cy-s*0.15} ${cx-s*0.6} ${cy-s*1.25} ${cx} ${cy-s*0.3}C${cx+s*0.6} ${cy-s*1.25} ${cx+s*1.5} ${cy-s*0.15} ${cx} ${cy+s*0.95}Z" fill="currentColor"/>`;
+  const drop = (cx, cy) => `<path d="M${cx} ${cy}c3 4.5 4 6 4 8a4 4 0 0 1-8 0c0-2 1-3.5 4-8z" fill="currentColor" fill-opacity=".85"/>`;
+  const eye = s => { const ex = s*14;
+    switch(eyes === 'wink' ? (s < 0 ? 'arc' : 'dot') : eyes){
+      case 'big': return `<circle cx="${ex}" cy="${ey}" r="6" fill="currentColor"/>`;
+      case 'arc': return S(`M${ex-6} ${ey+2.5}Q${ex} ${ey-5.5} ${ex+6} ${ey+2.5}`, 3.2);
+      case 'low': return S(`M${ex-6} ${ey-1}Q${ex} ${ey+5.5} ${ex+6} ${ey-1}`, 3);
+      case 'line': return S(`M${ex-5.5} ${ey}h11`, 3);
+      case 'x': return S(`M${ex-4} ${ey-4}l8 8M${ex+4} ${ey-4}l-8 8`, 2.8);
+      case 'heart': return heart(ex, ey, 5.4);
+      case 'star': return star(ex, ey, 6.6);
+      case 'half': return `<path d="M${ex-5.5} ${ey-0.5}h11a5.5 5.5 0 0 1-11 0z" fill="currentColor"/>` + S(`M${ex-6.5} ${ey-1.2}h13`, 2.4);
+      case 'side': return `<circle cx="${ex+2.6}" cy="${ey}" r="4.4" fill="currentColor"/>`;
+      case 'ring': return `<circle cx="${ex}" cy="${ey}" r="5.2" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="${ex}" cy="${ey}" r="1.4" fill="currentColor"/>`;
+      default: return `<circle cx="${ex}" cy="${ey}" r="4.6" fill="currentColor"/>`;
+    } };
+  const brow = s => { const xi = s*7, xo = s*21;
+    switch(brows === 'one' ? (s < 0 ? 'flat' : 'raised') : brows){
+      case 'angry': return S(`M${xo} ${by-3}L${xi} ${by+2.5}`, 2.6);
+      case 'worried': return S(`M${xo} ${by+2.5}L${xi} ${by-3}`, 2.6);
+      case 'raised': return S(`M${xo} ${by-2}Q${s*14} ${by-7} ${xi} ${by-2}`, 2.6);
+      case 'flat': return S(`M${xo} ${by}L${xi} ${by}`, 2.6);
+      default: return '';
+    } };
+  const M = {
+    smile: () => S(`M-9 ${my}Q0 ${my+8} 9 ${my}`), bigsmile: () => S(`M-12 ${my-1}Q0 ${my+12} 12 ${my-1}`),
+    grin: () => `<path d="M-11 ${my-1}Q0 ${my+16} 11 ${my-1}Z" fill="currentColor" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/>`,
+    flat: () => S(`M-8 ${my+2}h16`), frown: () => S(`M-9 ${my+5}Q0 ${my-3} 9 ${my+5}`),
+    wail: () => `<path d="M-9 ${my+7}Q0 ${my-8} 9 ${my+7}Z" fill="currentColor" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/>`,
+    o: () => `<circle cx="0" cy="${my+3}" r="3.6" fill="currentColor"/>`, O: () => `<ellipse cx="0" cy="${my+3}" rx="4.6" ry="6.2" fill="currentColor"/>`,
+    wavy: () => S(`M-10 ${my+2}q3.3 -4.5 6.6 0t6.6 0t6.6 0`, 2.8), smirk: () => S(`M-7 ${my+3}Q3 ${my+6.5} 9.5 ${my-2}`),
+    teeth: () => `<rect x="-9.5" y="${my-2}" width="19" height="8.5" rx="3.2" fill="none" stroke="currentColor" stroke-width="2.4"/>` + S(`M-3.2 ${my-2}v8.5M3.2 ${my-2}v8.5`, 1.6),
+    small: () => S(`M-5 ${my+2}Q0 ${my+5.5} 5 ${my+2}`), smallfrown: () => S(`M-5 ${my+4.5}Q0 ${my+1} 5 ${my+4.5}`),
+  };
+  const X = {
+    tear: () => drop(24, 2), tears: () => drop(24, 2) + drop(-24, 2), sweat: () => drop(31, -30),
+    zzz: () => `<text x="24" y="-22" font-size="14" font-weight="600" fill="currentColor" font-family="Outfit,sans-serif">z</text><text x="34" y="-32" font-size="10" font-weight="600" fill="currentColor" font-family="Outfit,sans-serif">z</text>`,
+    steam: () => S('M-27 -33q-4 -4 0 -8M27 -33q4 -4 0 -8M-19 -38q-3 -3 0 -6M19 -38q3 -3 0 -6', 2.2),
+    spark: () => star(31, -28, 7) + star(-31, -20, 4), heart: () => heart(30, -27, 5.5),
+    q: () => `<text x="24" y="-20" font-size="20" font-weight="500" fill="currentColor" font-family="Outfit,sans-serif">?</text>`,
+    dots: () => [22,28.5,35].map(x => `<circle cx="${x}" cy="-28" r="1.9" fill="currentColor"/>`).join(''),
+    blush: () => `<circle class="bl" cx="-25" cy="5" r="6" fill-opacity=".34"/><circle class="bl" cx="25" cy="5" r="6" fill-opacity=".34"/>`,
+    bolt: () => `<path d="M32 -40l-7 10h5.5l-3.5 9 9 -12h-5.5z" fill="currentColor"/>`,
+    cloud: () => `<g fill="currentColor" fill-opacity=".75"><circle cx="20" cy="-33" r="4.5"/><circle cx="27" cy="-36" r="6"/><circle cx="34" cy="-33" r="4.5"/><rect x="20" y="-34" width="14" height="5.5"/></g>`,
+  };
+  return `<svg viewBox="-50 -50 100 100" aria-hidden="true"><path class="fb" d="${body(42, 0)}"/><path class="fb fb2" d="${body(33, 1.7)}"/><g class="ft">${eye(-1)}${eye(1)}${brow(-1)}${brow(1)}${(M[mouth] || M.flat)()}${extra === '-' ? '' : extra.split('+').map(k => X[k] ? X[k]() : '').join('')}</g></svg>`;
+}
+/* the listener: a small one-colour cartoon portrait, drawn in the same ink as the rest of the screen */
+const PROF_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="currentColor" fill-opacity=".14"/>
+  <circle cx="32" cy="9" r="6.2" fill="currentColor"/>
+  <path d="M13.5 41C11 22 19.5 11.5 32 11.500S53 22 50.5 41c-.8 5-3.5 7.5-6 8.500H19.500c-2.5-1-5.2-3.5-6-8.500z" fill="currentColor"/>
+  <path d="M7 66c0-11.5 10.5-16.5 25-16.500S57 54.5 57 66z" fill="currentColor"/>
+  <path d="M27 41h10v9.500q-5 4.5-10 0z" style="fill:var(--g2)"/>
+  <path d="M20.8 30.500c0-8.5 4.2-13.5 11.2-13.500s11.2 5 11.2 13.500c0 9-5 14.8-11.2 14.800S20.8 39.5 20.8 30.500z" style="fill:var(--g2)"/>
+  <path d="M19.5 30c-.5-10 5-15.5 12.5-15.5 5 0 9.5 2.5 11.5 6.5-7 1.5-13.5.800-17.5-2.5-2 3.5-4 6.5-6.5 11.500z" fill="currentColor"/>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path stroke-width="1.7" d="M25 31.200q2-2.2 4 0M35 31.200q2-2.2 4 0M28.2 38q3.8 3.2 7.6 0"/>
+    <path stroke-width="1.1" d="M22.6 31a4.4 4.4 0 1 0 8.8 0a4.4 4.4 0 1 0-8.8 0M32.6 31a4.4 4.4 0 1 0 8.8 0a4.4 4.4 0 1 0-8.8 0M31.4 30.600h1.2"/></g>
+  <path d="M26.5 50.5 32 57l5.5-6.5" fill="none" style="stroke:var(--g2)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_PAL = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/><path d="M14.8 10.4l5-2.9M14.8 13.6l5 2.9M12 15.2V21M9.2 13.6l-5 2.9M9.2 10.4l-5-2.9"/><path class="f" d="M12 8.8V3a9 9 0 0 1 7.8 4.5l-5 2.9A3.2 3.2 0 0 0 12 8.8z"/></svg>`;
+const ICON_SAY = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5a8.5 8.5 0 0 1-12.6 7.4L3.5 20l1.2-4.2A8.5 8.5 0 1 1 20.5 11.5z"/></svg>`;
+/* back to center: one thing to do for each mood, with a picture */
+const DROP = (x, y, d) => `<path class="wf dr an" style="--d:${d}s" d="M${x} ${y}c5 8 7.5 11.5 7.5 15a7.5 7.5 0 0 1-15 0c0-3.5 2.5-7 7.5-15z"/>`;
+const FLAKE = x => `<path class="ln" stroke-width="2.4" d="M${x} 74v26M${x-11.3} 80.500l22.6 13M${x-11.3} 93.500l22.6-13"/>`;
+const CALM = [
+  {t:'Cool your face', how:'Splash cold water on your face, or hold something cold against your cheeks for thirty seconds.', why:'Cold on the face slows a racing heart within seconds.',
+   art:`<svg viewBox="0 0 200 150" aria-hidden="true">${DROP(62,12,0)}${DROP(100,2,.6)}${DROP(138,12,1.2)}<circle class="sf" cx="100" cy="98" r="46"/><circle class="ln" cx="100" cy="98" r="46" stroke-width="2.4"/><path class="ln" d="M76 92q8 7 16 0M108 92q8 7 16 0M90 116q10 7 20 0"/>${FLAKE(28)}${FLAKE(172)}</svg>`},
+  {t:'Breathe out twice as long', how:'In through your nose for four counts, out through your mouth for eight. Follow the circle for five rounds.', why:'A long exhale tells your body the danger has passed.',
+   art:`<svg viewBox="0 0 200 150" aria-hidden="true"><circle class="ln" cx="100" cy="75" r="66" stroke-width="2" stroke-dasharray="1 9"/><circle class="sf br an" cx="100" cy="75" r="60"/><circle class="ln br an" cx="100" cy="75" r="60" stroke-width="2.4"/><text class="tin" x="100" y="80" text-anchor="middle" font-size="15">in · 4</text><text class="tout" x="100" y="80" text-anchor="middle" font-size="15">out · 8</text></svg>`},
+  {t:'Walk for five minutes', how:'Stand up and walk, outside if you can. Look far ahead, not at the ground.', why:'Movement and daylight lift your energy faster than thinking does.',
+   art:`<svg viewBox="0 0 200 150" aria-hidden="true"><circle class="sf" cx="152" cy="42" r="17"/><circle class="ln" cx="152" cy="42" r="17" stroke-width="2.4"/><path class="ln" stroke-width="2.4" d="M152 15v-8M152 77v-8M125 42h-8M187 42h-8M133 23l-6-6M171 23l6-6M133 61l-6 6M171 61l6 6"/><path class="ln" stroke-width="2" stroke-dasharray="1 8" d="M10 132C54 116 92 130 128 112S176 96 192 92"/>${[[26,116,0],[46,134,.35],[70,112,.7],[94,130,1.05],[118,106,1.4],[142,118,1.75]].map(([x,y,d]) => `<ellipse class="wf ft" style="--d:${d}s" cx="${x}" cy="${y}" rx="8.5" ry="4.8" transform="rotate(-18 ${x} ${y})"/>`).join('')}</svg>`},
+  {t:'Name five things you see', how:'Then four you can touch, three you can hear, two you can smell and one you can taste.', why:'Your senses pull your attention out of your head and back into the room.',
+   art:`<svg viewBox="0 0 200 150" aria-hidden="true"><path class="ln" d="M48 56q52-46 104 0q-52 46-104 0z"/><circle class="sf" cx="100" cy="56" r="18"/><circle class="ln" cx="100" cy="56" r="18" stroke-width="2.4"/><circle class="wf" cx="100" cy="56" r="6.5"/>${[[34,16,5],[70,14,4],[102,12,3],[130,10.5,2],[155,9,1]].map(([x,r,n],i) => `<circle class="ln rp" style="--d:${i*.45}s" cx="${x}" cy="124" r="${r}" stroke-width="2"/><text x="${x}" y="${124 + r*.36}" text-anchor="middle" font-size="${r}">${n}</text>`).join('')}</svg>`},
+  {t:'Take three slow breaths', how:'Drop your shoulders, loosen your jaw and take three unhurried breaths.', why:'You are close to your center already. This settles you in.',
+   art:`<svg viewBox="0 0 200 150" aria-hidden="true"><path class="ln wv an" style="--d:0s" d="M34 46h82a15 15 0 1 0-15-15"/><path class="ln wv an" style="--d:-1s" d="M22 78h126a17 17 0 1 1-17 17"/><path class="ln wv an" style="--d:-2s" d="M46 110h56a13 13 0 1 1-13 13"/></svg>`},
+  {t:'Feel your feet', how:'Press both feet into the floor and notice their weight for ten breaths.', why:'Grounding keeps high energy steady instead of scattered.',
+   art:`<svg viewBox="0 0 200 150" aria-hidden="true">${[[-1,74],[1,126]].map(([s,x]) => `<path class="sf" d="M${x} 104c-11 0-16-10-15-24 1-15 6-30 15-30s14 15 14 30c0 14-4 24-14 24z"/><path class="ln" stroke-width="2.4" d="M${x} 104c-11 0-16-10-15-24 1-15 6-30 15-30s14 15 14 30c0 14-4 24-14 24z"/>${[[9,43,5.4],[-.5,39.5,4.2],[-8.5,42,3.7],[-15,47.5,3.2]].map(([dx,y,r]) => `<circle class="wf" cx="${x + dx*s*-1}" cy="${y}" r="${r}"/>`).join('')}`).join('')}<path class="ln rp" style="--d:0s" stroke-width="2.2" d="M52 118q48 14 96 0"/><path class="ln rp" style="--d:.5s" stroke-width="2.2" d="M36 128q64 20 128 0"/><path class="ln rp" style="--d:1s" stroke-width="2.2" d="M22 138q78 24 156 0"/></svg>`},
+  {t:'Hand on your heart', how:'Rest a hand on your chest and stay with this feeling for twenty seconds.', why:'Savouring a high lets it settle into calm instead of slipping away.',
+   art:`<svg viewBox="0 0 200 150" aria-hidden="true"><circle class="ln rp" style="--d:0s" cx="100" cy="76" r="62" stroke-width="1.8"/><circle class="ln rp" style="--d:.8s" cx="100" cy="76" r="72" stroke-width="1.4"/><g class="hb an"><path class="sf" d="M100 124C62 98 46 78 46 58a27 27 0 0 1 54-8a27 27 0 0 1 54 8c0 20-16 40-54 66z"/><path class="ln" d="M100 124C62 98 46 78 46 58a27 27 0 0 1 54-8a27 27 0 0 1 54 8c0 20-16 40-54 66z"/><path class="ln" stroke-width="2.4" d="M62 58a13 13 0 0 1 13-13"/></g></svg>`},
+];
+/* what the app says once a feeling is noticed: one of six ways of saying the same thing */
+const AFFIRM = [
+  'It was a small act but reflecting on how you feel immediately gives you control. Feel free to sit with this feeling and at the same time realize it’s not You, it’s just an emotion that come and go.',
+  'You paused and looked. That alone puts you back in charge. This feeling is a visitor, not who you are.',
+  'Naming a feeling loosens its grip. Let it stay a while. It will pass, and you will still be you.',
+  'A small step, and a real one. You noticed instead of being carried away. Feelings come and go. You stay.',
+  'You are the sky. This feeling is today’s weather. Watch it move through.',
+  'Noticing is the whole practice. Sit with this feeling as long as you like. It is passing through. It is not you.',
+];
+const noteLine = n => (n || '').split('\n').filter(Boolean).join(' · ');
+
+const hexRgb = h => { const n = parseInt(h.slice(1),16); return [n>>16&255, n>>8&255, n&255]; };
+const mix = (a,b,t) => { const A = hexRgb(a), B = hexRgb(b); return `rgb(${A.map((x,i) => Math.round(x+(B[i]-x)*t)).join(',')})`; };
+const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sm = x => { x = Math.max(0, Math.min(1, x)); return x*x*(3-2*x); };
+const lvOf = v => Math.round(v/100);
+/* the ink is white on every mood (the scale is deep enough for it) */
+function inkAt(v){ const k = 0, m = (a, b) => Math.round(a + (b - a)*k); return {fg:[m(255,26), m(255,15), m(255,51)].join(','), inv:[m(21,255), m(25,255), m(36,255)].join(','), bo:(0.16 + 0.17*k).toFixed(3), ftf:k < .02 ? 'none' : `drop-shadow(0 1.5px 2.2px rgba(60,30,10,${(0.55*k).toFixed(2)}))`, css(){ return `--fg:${this.fg};--inv:${this.inv};--bo:${this.bo};--ftf:${this.ftf}`; }}; }
+function colorsAt(v){ const p = Math.max(0, Math.min(600, v))/100, i = Math.min(5, Math.floor(p)), t = p - i; return [mix(LV[i].c[0], LV[i+1].c[0], t), mix(LV[i].c[1], LV[i+1].c[1], t)]; }
+const PIN = 'M8 1.5a4.6 4.6 0 0 0-4.6 4.6C3.4 9.6 8 14.5 8 14.5s4.6-4.9 4.6-8.4A4.6 4.6 0 0 0 8 1.5zm0 6.3a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z';
+
+/* ---------- dates: a day runs 06:00 to 06:00 ---------- */
+const DS = 360;
+const keyOf = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parseKey = k => { const [y,m,d] = k.split('-').map(Number); return new Date(y,m-1,d); };
+const addDays = (k,n) => { const d = parseKey(k); d.setDate(d.getDate()+n); return keyOf(d); };
+const dk = ts => keyOf(new Date(ts - DS*60000));
+const TODAY = () => dk(Date.now());
+const minsOf = ts => { const d = new Date(ts); return d.getHours()*60 + d.getMinutes(); };
+const dm = ts => (minsOf(ts) - DS + 1440) % 1440;
+const hhmm = m => pad(Math.floor(m/60)) + ':' + pad(m%60);
+const at = (k, mins) => { const d = parseKey(k); d.setHours(Math.floor(mins/60), mins%60, 0, 0); return d.getTime(); };
+function dayTitle(k){ return k === TODAY() ? 'today' : k === addDays(TODAY(),-1) ? 'yesterday' : parseKey(k).toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'}); }
+
+/* ---------- state ---------- */
+const KEY = 'mood-thread-v1';
+let store; try{ store = JSON.parse(localStorage.getItem(KEY)); }catch(e){}
+if(!store || !Array.isArray(store.logs)) store = {logs:[], places:[]};
+store.places = store.places || [];
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} }
+const logsFor = k => store.logs.filter(l => dk(l.t) === k).sort((a,b) => a.t - b.t);
+const DEMO_PLACES = [{id:'demo_home',name:'Home',lat:47.5175,lng:19.052},{id:'demo_work',name:'Work',lat:47.4857,lng:19.0712},{id:'demo_gym',name:'Gym',lat:47.5075,lng:19.027},{id:'demo_cafe',name:'Café',lat:47.4975,lng:19.0628}];
+const DEMO_LOGS = [['demo_home',2],['demo_home',4],['demo_work',1,'skull'],['demo_work',3],['demo_work',2],['demo_cafe',5],['demo_gym',6,'crown'],['demo_gym',5],['demo_home',5],['demo_home',4]].map(([place,v,mark],i) => ({id:'demo'+i, t:0, v, place, mark, core:'', word:'', note:''}));
+const SUGGEST = ['Home','Work','Gym','Café','Commute','Outdoors','School','A friend’s place'];
+const realPlace = id => store.places.find(p => p.id === id);
+const placeOf = id => realPlace(id) || DEMO_PLACES.find(p => p.id === id);
+/* exact spots: coordinates are shown wherever a place is, and can be pasted in as "47.4979, 19.0402" or as a maps link */
+const EX_GEO = {p_home:[47.5175,19.052], p_office:[47.4857,19.0712], p_cafe:[47.4975,19.0628], p_train:[47.5003,19.084]};
+const geoOf = l => { if(l.geo) return l.geo; const pl = placeOf(l.place); return pl && pl.lat != null ? {lat:pl.lat, lng:pl.lng} : null; };
+const fmtGeo = g => `${Math.abs(g.lat).toFixed(5)}° ${g.lat >= 0 ? 'N' : 'S'}, ${Math.abs(g.lng).toFixed(5)}° ${g.lng >= 0 ? 'E' : 'W'}`;
+const osmLink = g => `https://www.openstreetmap.org/?mlat=${g.lat.toFixed(5)}&mlon=${g.lng.toFixed(5)}#map=17/${g.lat.toFixed(5)}/${g.lng.toFixed(5)}`;
+function parseGeo(t){
+  t = String(t || '').trim(); let m, lat, lng;
+  if((m = t.match(/mlat=(-?[\d.]+)&mlon=(-?[\d.]+)/)) || (m = t.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)) || (m = t.match(/#map=\d+\/(-?[\d.]+)\/(-?[\d.]+)/)) || (m = t.match(/[?&](?:q|ll|query|center|destination)=(-?\d+\.\d+)(?:,|%2C)\s*(-?\d+\.\d+)/i))){ lat = +m[1]; lng = +m[2]; }
+  else { const u = t.replace(/^\s*(-?\d{1,2}),(\d+)\s*[;\s]\s*(-?\d{1,3}),(\d+)\s*$/, '$1.$2, $3.$4');   /* decimal commas: 47,4979; 19,0402 */
+    if((m = u.match(/(?:^|[^\d.\-])(-?\d{1,2}(?:\.\d+)?)\s*°?\s*([NSns])?\s*[,;\s]\s*(-?\d{1,3}(?:\.\d+)?)\s*°?\s*([EWew])?(?![\d.])/))){ lat = +m[1]*(/s/i.test(m[2] || '') ? -1 : 1); lng = +m[3]*(/w/i.test(m[4] || '') ? -1 : 1); } }
+  return isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0) ? {lat, lng} : null;
+}
+const MK = {crown:'M2.6 8.2 7.2 11.8 12 4.6l4.8 7.2 4.6-3.6-1.7 9.3H4.3zM4.6 19h14.8v2H4.6z', skull:'M12 2.5C7.3 2.5 3.5 6 3.5 10.6c0 2.6 1.2 4.7 3 6.1v2.8c0 .8.7 1.5 1.5 1.5h8c.8 0 1.5-.7 1.5-1.5v-2.8c1.8-1.4 3-3.5 3-6.1C20.5 6 16.7 2.5 12 2.5zM8.8 9a2.1 2.1 0 1 0 0 4.2 2.1 2.1 0 0 0 0-4.2zM15.2 9a2.1 2.1 0 1 0 0 4.2 2.1 2.1 0 0 0 0-4.2zM12 14l-1.3 2.3h2.6zM9.6 18.4v2.6h1v-2.6zM13.4 18.4v2.6h1v-2.6z'}, MKN = {crown:'highlight of the day', skull:'low point of the day'};
+/* one crown and one skull per day: marking a feeling moves the sign there */
+const canMark = (l, m) => m === 'crown' ? l.v >= 3 : l.v <= 3;
+function setMark(l, m){ const k = dk(l.t); if(l.mark === m) delete l.mark; else if(!canMark(l, m)) return; else { store.logs.forEach(x => { if(x !== l && x.mark === m && dk(x.t) === k) delete x.mark; }); l.mark = m; } save(); }
+const mkIcon = (l, x, y, sz) => `<g class="mk" data-mk="${l.id}" tabindex="0" role="button" aria-label="${MKN[l.mark]}, ${hhmm(minsOf(l.t))}. Write what caused it" transform="translate(${(x - sz/2).toFixed(1)} ${(y - sz/2).toFixed(1)}) scale(${(sz/24).toFixed(3)})"><rect x="-9" y="-9" width="42" height="42" fill="transparent"/><path fill-rule="evenodd" d="${MK[l.mark]}"/></g>`;
+const labelOf = l => l.word || l.core || LV[l.v].name;
+/* example week: fills any empty day in the last 7 so the curve has something to show (once) */
+const WK_WORK = [
+  [[440,3,'','','','p_home'],[540,4,'Curious','Focused','Deep work before anyone was online','p_office'],[700,2,'Uneasy','Impatient','Meeting ran over','p_office'],[780,4,'Peaceful','Content','','p_cafe'],[960,1,'Anxious','Stressed','Deadline moved up','p_office'],[1090,3,'','','','p_train'],[1200,5,'Happy','Playful','Board games night','p_home'],[1350,4,'Steady','Rested','','p_home']],
+  [[410,2,'Tired','Sleepy','Slept badly','p_home'],[500,3,'Bored','Unmotivated','','p_train'],[620,4,'Curious','Engaged','Workshop went well','p_office'],[770,5,'Loved','Appreciated','Kind note from a colleague','p_office'],[900,3,'','','','p_office'],[1050,4,'Peaceful','Relieved','Inbox zero','p_office'],[1180,5,'Excited','Energized','Evening run','p_home'],[1320,4,'','','','p_home']],
+  [[450,4,'Steady','Okay','','p_home'],[570,1,'Angry','Annoyed','Missed the train','p_train'],[690,2,'Down','Discouraged','Review feedback stung','p_office'],[800,3,'Unsure','Mixed','','p_cafe'],[940,4,'Curious','Focused','','p_office'],[1100,5,'Proud','Accomplished','Shipped the thing','p_office'],[1230,6,'Adored','Cherished','Dinner with family','p_home'],[1360,5,'','','','p_home']],
+];
+const WK_END = [
+  [[560,5,'Happy','Cheerful','Slow breakfast','p_home'],[680,6,'Powerful','Free','Long hike','p_home'],[820,5,'Loved','Included','Lunch with friends','p_cafe'],[960,4,'Peaceful','Relaxed','','p_home'],[1110,3,'Bored','Restless','','p_home'],[1250,5,'Happy','Amused','Movie night','p_home'],[1400,4,'','','','p_home']],
+  [[600,4,'Peaceful','Calm','','p_home'],[720,3,'','','','p_home'],[840,5,'Proud','Capable','Fixed the bike','p_home'],[990,2,'Down','Lonely','Quiet afternoon','p_home'],[1120,4,'Curious','Open','','p_cafe'],[1260,2,'Uneasy','Nervous','Sunday scaries','p_home'],[1380,3,'','','','p_home']],
+];
+(function seedWeek(){
+  if(store.seedV >= 2) return;
+  [['p_home','Home'],['p_office','Office'],['p_cafe','Café'],['p_train','On the train']].forEach(([id,name]) => { if(!store.places.some(p => p.id === id)) store.places.push({id, name, ex:true}); });
+  const nowM = minsOf(Date.now());
+  for(let d = 0; d < 7; d++){
+    const k = addDays(TODAY(), -d); if(logsFor(k).length) continue;
+    const wd = parseKey(k).getDay(), tpl = wd === 0 || wd === 6 ? WK_END[wd ? 0 : 1] : WK_WORK[wd % 3];
+    tpl.forEach(([m,v,core,word,note,place], i) => { if(d === 0 && m > nowM) return; store.logs.push({id:'x'+k+i, t:at(k,m), v, core, word, note, place, ex:true}); });
+  }
+  store.seedV = 2; save();
+})();
+{ const EX_WHEN = {future:/deadline|scaries/i, past:/ran over|slept|missed|stung|kind note|went well|shipped|fixed/i};
+  store.logs.forEach(l => { if(l.ex && l.note && !l.when) l.when = EX_WHEN.future.test(l.note) ? 'future' : EX_WHEN.past.test(l.note) ? 'past' : 'now'; });
+  if(!store.exMk){ const byDay = {}; store.logs.forEach(l => { if(l.ex) (byDay[dk(l.t)] = byDay[dk(l.t)] || []).push(l); });
+    Object.values(byDay).forEach(ls => { if(ls.length > 2 && !ls.some(l => l.mark)){ ls.reduce((a,l) => l.v > a.v ? l : a).mark = 'crown'; const lo = ls.reduce((a,l) => l.v < a.v ? l : a); if(!lo.mark) lo.mark = 'skull'; } }); store.exMk = 1; } }
+store.logs.forEach(l => { if(l.mark && !canMark(l, l.mark)) delete l.mark; });
+store.places.forEach(p => { if(p.ex && p.lat == null && EX_GEO[p.id]){ p.lat = EX_GEO[p.id][0]; p.lng = EX_GEO[p.id][1]; } });
+
+/* the feeling being captured right now */
+const D = {v:300, touched:false, core:'', word:'', note:'', place:'', geo:null, geoTried:false};
+(function(){ const last = store.logs.filter(l => !l.ex).sort((a,b) => b.t - a.t)[0]; if(last && realPlace(last.place)) D.place = last.place; })();
+const ui = {day:TODAY(), scope:'day', drag:false, mapScope:'day', noticed:null, adjust:null, spotEdit:null};
+const app = $('app');
+/* the dashboard behind the tab: closed until it is pulled down (or the tab is tapped); it remembers how you left it */
+const dash = $('dash'), pull = $('pull');
+let dashOpen = false, pd = null;
+function setDash(open, quiet){
+  notifOn(false); dashOpen = open; dash.classList.remove('drag'); dash.style.height = open ? $('dashIn').offsetHeight + 'px' : '0px';
+  app.classList.toggle('dashOpen', open); dash.inert = !open;
+  const tb = $('dashTab'); tb.setAttribute('aria-expanded', open); tb.setAttribute('aria-label', open ? 'Hide your curve' : 'Show your curve');
+  if(!quiet){ store.dash = open; save(); }
+}
+pull.addEventListener('pointerdown', e => { pd = {y:e.clientY, h:dash.offsetHeight, moved:false}; try{ pull.setPointerCapture(e.pointerId); }catch(_){} });
+pull.addEventListener('pointermove', e => { if(!pd) return; const dy = e.clientY - pd.y; if(Math.abs(dy) > 4) pd.moved = true; if(!pd.moved) return;
+  dash.classList.add('drag'); dash.inert = false; dash.style.height = Math.max(0, Math.min($('dashIn').offsetHeight, pd.h + dy)) + 'px'; });
+const pullEnd = () => { if(!pd) return; const p = pd; pd = null;
+  if(!p.moved){ setDash(!dashOpen); return; }
+  const H = $('dashIn').offsetHeight, h = dash.offsetHeight; setDash(dashOpen ? h > H*0.75 : h > H*0.22); };
+pull.addEventListener('pointerup', pullEnd); pull.addEventListener('pointercancel', pullEnd);
+$('dashTab').addEventListener('click', e => { if(e.detail === 0) setDash(!dashOpen); });   /* keyboard */
+
+let toastT;
+function toast(m){ const t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2400); }
+
+/* ---------- the blob's face: every feature is computed from the mood value ---------- */
+function drawFace(ts){
+  const svg = $('face'); if(reduced()) ts = 700;
+  const t = (D.v - 300)/300, neg = Math.max(0, -t), posi = Math.max(0, t), ph = ts/1700, L = D.v/100;
+  const w = i => Math.max(0, 1 - Math.abs(L - i));     /* how much of each state's own little animation is showing */
+  const set = (id, a, v) => $(id).setAttribute(a, v), op = (id, v) => { $(id).style.opacity = Math.max(0, Math.min(1, v)).toFixed(3); };
+  const shape = (R, off) => { const N = 96, sx = 1 + 0.07*neg - 0.02*posi; let d = '';
+    for(let i=0;i<=N;i++){ const th = i/N*2*Math.PI, sn = Math.sin(th);
+      const r = R*(1 + 0.045*Math.sin(3*th + ph + off) + 0.03*Math.sin(5*th - ph*1.3 + off) + 0.015*Math.sin(ts/800));
+      const yy = r*sn*(sn < 0 ? 1 - 0.14*neg + 0.05*posi : 1 + 0.03*neg);
+      d += (i ? 'L' : 'M') + (r*Math.cos(th)*sx).toFixed(1) + ' ' + (yy + 5*neg).toFixed(1); }
+    return d + 'Z'; };
+  set('fBody', 'd', shape(84, 0)); set('fBody2', 'd', shape(68, 1.7));
+  /* eyes: heavy lids when low, a glance from side to side when okay, happy arcs from good upwards */
+  const joy = sm((t - 0.25)/0.6), ey = -8 + 5*neg - 2*posi, blink = (ts % 4200) > 4080 ? 0.15 : 1;
+  const droop = 1 - w(2)*0.42*(0.5 + 0.5*Math.sin(ts/1500));
+  const look = w(3)*3.4*Math.max(-1, Math.min(1, Math.sin(ts/1150)*2.4));
+  for(const [id, ex] of [['fEL',-27],['fER',27]]){ set(id, 'cx', (ex + look).toFixed(1)); set(id, 'cy', ey.toFixed(1)); set(id, 'ry', (9.5*(1 - 0.22*neg)*blink*droop).toFixed(2)); op(id, 1 - joy); }
+  for(const [id, ex] of [['fAL',-27],['fAR',27]]){ set(id, 'd', `M${ex-9.5} ${(ey+3).toFixed(1)}Q${ex} ${(ey-10).toFixed(1)} ${ex+9.5} ${(ey+3).toFixed(1)}`); op(id, joy); }
+  /* brows: always there, softly; they knit now and then when things are bad */
+  const twitch = w(1)*2.4*Math.pow(Math.max(0, Math.sin(ts/650)), 10);
+  const k = 5*neg + twitch, by = ey - 17 - 2*posi, bo = Math.max(sm(neg*1.4)*0.9, 0.42), lift = 1.5 + 4*posi;
+  set('fBL', 'd', `M-37 ${(by+k).toFixed(1)}Q-28.5 ${(by-lift).toFixed(1)} -20 ${(by-k).toFixed(1)}`); set('fBR', 'd', `M37 ${(by+k).toFixed(1)}Q28.5 ${(by-lift).toFixed(1)} 20 ${(by-k).toFixed(1)}`);
+  op('fBL', bo); op('fBR', bo);
+  const ny = 6.5 + 4*neg; set('fNose', 'd', `M${(-3.5 + look*.4).toFixed(1)} ${ny.toFixed(1)}q3.5 3.6 7 0`);
+  /* mouth: the lip quivers when it is awful; dimples from good upwards */
+  const q = (w(0)*1.1 + w(1)*0.45)*Math.sin(ts/50);
+  const mw = 11 + 9*posi + 3*neg, c = 3.4 + (t >= 0 ? t*13.6 : t*14.4), open = sm((t - 0.6)/0.4), my = 26 + 6*neg - 2*posi;
+  set('fMouth', 'd', `M${(-mw+q).toFixed(1)} ${my.toFixed(1)}Q${q.toFixed(1)} ${(my + c*(1 + 1.1*open)).toFixed(1)} ${(mw+q).toFixed(1)} ${my.toFixed(1)}Q${q.toFixed(1)} ${(my + c*(1 - 0.5*open)).toFixed(1)} ${(-mw+q).toFixed(1)} ${my.toFixed(1)}Z`);
+  set('fDim', 'd', `M${(-mw-5).toFixed(1)} ${(my-4.5).toFixed(1)}q-2.6 3.6 0 7.2M${(mw+5).toFixed(1)} ${(my-4.5).toFixed(1)}q2.6 3.6 0 7.2`); op('fDim', sm((t - 0.15)/0.4)*0.7);
+  op('fCL', 0.08 + 0.26*posi + w(4)*0.07*Math.sin(ts/500)); op('fCR', 0.08 + 0.26*posi + w(4)*0.07*Math.sin(ts/500));
+  /* awful: tears roll down both cheeks, one after the other */
+  const tr = sm((neg - 0.7)/0.3);
+  for(const [id, o] of [['fTear',0],['fTearL',.5]]){ const p = (ts/1700 + o) % 1; set(id, 'transform', `translate(0 ${(5*neg + 34*p).toFixed(1)})`); op(id, tr*0.9*(p < .15 ? p/.15 : 1 - (p - .15)/.85)); }
+  /* bad: a bead of sweat slides down the temple */
+  { const p = (ts/2200) % 1; set('fSweat', 'transform', `translate(58 ${(-48 + 18*p).toFixed(1)})`); op('fSweat', w(1)*0.9*Math.sin(Math.PI*p)); }
+  /* low: a long sigh drifts away from the mouth */
+  for(const [id, o] of [['fSigh',0],['fSigh2',.16]]){ const p = ((ts/3600 + o) % 1)/0.5; set(id, 'cx', (mw + 11 + 22*p).toFixed(1)); set(id, 'cy', (my + 2 + 5*p).toFixed(1)); set(id, 'r', (2 + 4.5*Math.min(1, p)).toFixed(1)); op(id, p < 1 ? w(2)*0.7*(1 - p) : 0); }
+  /* good: humming, a little note floats up */
+  { const p = (ts/3200) % 1; set('fNote', 'transform', `translate(${(58 + 6*Math.sin(p*6.283)).toFixed(1)} ${(-34 - 28*p).toFixed(1)}) rotate(${(8*Math.sin(p*6.283)).toFixed(1)})`); op('fNote', w(4)*Math.sin(Math.PI*p)); }
+  /* great and wonderful: sparkles twinkle; wonderful: hearts float up too */
+  const sp = Math.max(w(5), w(6));
+  for(const [id, x, y, o] of [['fS1',64,-52,0],['fS2',-68,-34,2.1],['fS3',58,40,4.2]]){ const s = Math.abs(Math.sin(ts/520 + o)); set(id, 'transform', `translate(${x} ${y}) scale(${(.35 + .75*s).toFixed(2)})`); op(id, sp*(.25 + .75*s)); }
+  for(const [id, x, y, o] of [['fH1',-64,8,0],['fH2',66,-2,.5]]){ const p = (ts/2600 + o) % 1; set(id, 'transform', `translate(${(x + 7*Math.sin(p*6.283)).toFixed(1)} ${(y - 50*p).toFixed(1)}) scale(${(.7 + .6*p).toFixed(2)})`); op(id, w(6)*Math.sin(Math.PI*p)); }
+  svg.style.transform = `translateY(${(Math.sin(ts/900)*(3 + 3*posi) + w(0)*1.8*Math.abs(Math.sin(ts/260))).toFixed(1)}px) rotate(${(Math.sin(ts/1300)*3*posi + w(4)*2.5*Math.sin(ts/800)).toFixed(2)}deg)`;
+}
+function faceLoop(ts){ if($('sheet').hidden && !document.hidden) drawFace(ts); requestAnimationFrame(faceLoop); }
+
+/* ---------- landing: paint the current mood ---------- */
+let Gc = null;   /* where a feeling captured now would land on the curve */
+function paint(){
+  const lv = lvOf(D.v), [g1,g2] = colorsAt(D.v);
+  app.style.setProperty('--g1', g1); app.style.setProperty('--g2', g2);
+  const ink = inkAt(D.v); for(const k of ['fg','inv','bo','ftf']) app.style.setProperty('--' + k, ink[k]);
+  $('mark').style.top = ((600 - D.v)/600*100).toFixed(2) + '%';
+  const nm = LV[lv].name.toLowerCase(); if($('word').textContent !== nm) $('word').textContent = nm;
+  const t = $('temp'); t.setAttribute('aria-valuenow', lv); t.setAttribute('aria-valuetext', LV[lv].name);
+  $('hint').style.opacity = D.touched ? 0 : .8;
+  $('actions').classList.toggle('show', !!ui.noticed && !ui.drag);
+  const g = $('ghost'), gl = $('ghostL');
+  if(g){ const on = D.touched && Gc && !ui.noticed; g.style.display = on ? '' : 'none'; if(gl) gl.style.display = on && Gc.last ? '' : 'none';
+    if(on){ const gy = Gc.y(D.v/100); g.setAttribute('cy', gy.toFixed(1)); if(gl && Gc.last) gl.setAttribute('y2', gy.toFixed(1)); } }
+  if(reduced()) drawFace(0);
+}
+const noticedRec = () => ui.noticed ? logById(ui.noticed) : null;
+function unNotice(){ notifOn(false); if(ui.noticed){ ui.adjust = ui.noticed; ui.noticed = null; paintDraft(); } }
+function paintDraft(){
+  const R = noticedRec(); if(ui.noticed && !R) ui.noticed = null;
+  $('actions').classList.toggle('noticed', !!R); app.classList.toggle('noticed', !!R);
+  const bits = []; if(R){ if(R.core) bits.push((R.word ? R.core + ' › ' + R.word : R.core).toLowerCase()); if(R.note) bits.push('“' + noteLine(R.note) + '”'); }
+  $('detail').textContent = bits.join('  ·  ');
+  if(R){ const tx = AFFIRM[(R.af || 0) % AFFIRM.length]; if($('amText').textContent !== tx) $('amText').textContent = tx; }
+  $('crownBtn').setAttribute('aria-pressed', !!(R && R.mark === 'crown')); $('skullBtn').setAttribute('aria-pressed', !!(R && R.mark === 'skull'));
+  $('crownBtn').hidden = !(R && canMark(R, 'crown')); $('skullBtn').hidden = !(R && canMark(R, 'skull'));
+  const low = !!(R && R.v <= 2); $('helpBtn').hidden = !low; $('tune').classList.toggle('hashelp', low);
+  $('palBtn').classList.toggle('set', !!(R && R.core)); $('noteBtn').classList.toggle('set', !!(R && R.note));
+  drawChecks();
+}
+/* ---------- four check-ins a day: four little blobs that wake up one by one ---------- */
+const blobD = (R, seed) => { let d = ''; for(let i=0;i<=36;i++){ const th = i/36*2*Math.PI, r = R*(1 + 0.06*Math.sin(3*th + seed*1.9) + 0.04*Math.sin(5*th + seed*0.7)); d += (i ? 'L' : 'M') + (r*Math.cos(th)).toFixed(1) + ' ' + (r*Math.sin(th)).toFixed(1); } return d + 'Z'; };
+function tinyFace(kind, lv, i){
+  const c = .55 + (lv - 3)/3*2.2, B = blobD(10, i + 1), my = (3.6 - c*0.35).toFixed(1), mouth = `M-3.6 ${my}Q0 ${(3.6 + c*1.5).toFixed(1)} 3.6 ${my}`, V = 'viewBox="-13 -13 26 26" aria-hidden="true"';
+  if(kind === 'done') return `<svg ${V}><path d="${B}" fill="currentColor"/><g style="fill:var(--g1)"><circle cx="-3.5" cy="-1.6" r="1.5"/><circle cx="3.5" cy="-1.6" r="1.5"/></g><path d="${mouth}" fill="none" style="stroke:var(--g1)" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+  if(kind === 'zz') return `<svg ${V}><path d="${B}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 2.6"/><path d="M-5.6 -.4q1.9 1.9 3.8 0M1.8 -.4q1.9 1.9 3.8 0" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><text x="8" y="-7" font-size="7.5" font-weight="600" fill="currentColor" font-family="Outfit,sans-serif">z</text></svg>`;
+  return `<svg ${V}><path d="${B}" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.5"/><circle cx="-3.5" cy="-1.6" r="1.4" fill="currentColor"/><circle cx="3.5" cy="-1.6" r="1.4" fill="currentColor"/><path d="${kind === 'prog' ? mouth : 'M-2.4 4h4.8'}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+}
+function checkState(){ const logs = logsFor(TODAY()).filter(l => !l.ex), prog = ui.noticed && logs.some(l => l.id === ui.noticed) ? 1 : 0; return {logs, done: logs.length - prog, prog}; }
+function checksRow(st, popI){ let s = '';
+  for(let i=0;i<4;i++){ const kind = i < st.done ? 'done' : i === st.done ? (st.prog ? 'prog' : 'next') : 'zz', lv = i <= st.done && st.logs[i] ? st.logs[i].v : 3;
+    s += `<span class="ck ${kind}${i === popI ? ' pop' : ''}">${tinyFace(kind, lv, i)}</span>`; }
+  return s; }
+function drawChecks(popI){
+  const st = checkState(), el = $('checks');
+  el.innerHTML = `<div class="ckrow">${checksRow(st, popI)}</div><em>${st.done >= 4 ? 'all 4 done' + (st.done > 4 ? ' +' + (st.done - 4) : '') + ' ✦' : (st.done + 1) + ' of 4'}</em>`;
+  el.setAttribute('aria-label', st.done >= 4 ? 'All 4 check-ins done today' : `Check-in ${st.done + 1} of 4 today, ${4 - st.done} left`);
+}
+/* the check-in is done: a ring and a tick draw themselves, "Noted!" arrives letter by letter over a hand-drawn line,
+   a burst of small stars drifts down, and the whole thing files itself away into the arrow at the top */
+let endT = null, notifT = null, endRec = null, endPop = -1, fxRaf = null;
+function noteFx(){
+  const cv = $('ndFx'), box = $('noted').getBoundingClientRect(), mk = $('ndMark').getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+  cv.width = box.width*dpr; cv.height = box.height*dpr;
+  const g = cv.getContext('2d'), cx = mk.left + mk.width/2 - box.left, cy = mk.top + mk.height/2 - box.top, ink = getComputedStyle(app).getPropertyValue('--fg') || '255,255,255';
+  const P = [];
+  for(let i=0;i<34;i++){ const a = i/34*6.283 + Math.random()*.25, sp = 90 + Math.random()*230;
+    P.push({x:cx, y:cy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 40, r:2.2 + Math.random()*4.2, t0:1050 + Math.random()*120, life:1300 + Math.random()*1100, star:i % 3 !== 0, rot:Math.random()*6.28, vr:(Math.random() - .5)*5}); }
+  for(let i=0;i<16;i++) P.push({x:Math.random()*box.width, y:box.height + 10, vx:(Math.random() - .5)*14, vy:-(26 + Math.random()*34), r:1.2 + Math.random()*2, t0:Math.random()*2600, life:3400, star:false, mote:true, rot:0, vr:0});
+  const start = performance.now(); let last = start;
+  const step = now => { const dt = Math.min(.05, (now - last)/1000); last = now; const T = now - start;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, box.width, box.height);
+    for(const p of P){ const age = T - p.t0; if(age < 0 || age > p.life) continue;
+      if(!p.mote){ p.vx *= 1 - 1.5*dt; p.vy = p.vy*(1 - 1.5*dt) + 150*dt; }
+      p.x += p.vx*dt; p.y += p.vy*dt; p.rot += p.vr*dt;
+      const k = age/p.life, a = (p.mote ? .5 : 1)*(k < .12 ? k/.12 : 1 - (k - .12)/.88), tw = p.mote ? 1 : .7 + .3*Math.sin(age/90 + p.rot);
+      g.fillStyle = `rgba(${ink},${(a*tw).toFixed(3)})`;
+      if(p.star){ const r = p.r*(1.2 - .4*k); g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.beginPath(); g.moveTo(0, -r*1.7); g.quadraticCurveTo(0, 0, r*1.7, 0); g.quadraticCurveTo(0, 0, 0, r*1.7); g.quadraticCurveTo(0, 0, -r*1.7, 0); g.quadraticCurveTo(0, 0, 0, -r*1.7); g.fill(); g.restore(); }
+      else { g.beginPath(); g.arc(p.x, p.y, p.r*.6, 0, 6.283); g.fill(); } }
+    if(T < 5200 && !$('noted').hidden) fxRaf = requestAnimationFrame(step); };
+  cancelAnimationFrame(fxRaf); fxRaf = requestAnimationFrame(step);
+}
+function ending(){
+  const R = noticedRec(); if(!R) return;
+  ui.noticed = null; ui.adjust = null; D.touched = false; paintDraft(); paint();
+  const st = checkState(), el = $('noted');
+  endRec = R; endPop = st.done <= 4 ? st.done - 1 : -1;
+  $('ndWord').innerHTML = [...'Noted!'].map((c, i) => `<span style="--i:${i}">${c}</span>`).join('') + '<span class="sp" aria-hidden="true">✨</span>';
+  $('ndChecks').innerHTML = `<div class="ckrow">${checksRow(st, endPop)}</div><em>${st.done < 4 ? `${st.done} of 4 check-ins done · ${4 - st.done} to go` : st.done === 4 ? 'all four check-ins done today ✦' : `${st.done} check-ins today ✦`}</em>${st.done >= 4 ? '<button type="button" class="wr-done" id="ndWrap">See your day →</button>' : ''}`;
+  el.hidden = false; el.classList.remove('go', 'bye'); void el.offsetWidth; el.classList.add('go');
+  if(!reduced()) noteFx();
+  clearTimeout(endT); endT = setTimeout(endDone, st.done >= 4 ? 12000 : reduced() ? 3200 : 5600);
+}
+function endDone(){
+  const el = $('noted'); clearTimeout(endT); if(el.hidden || el.classList.contains('bye')) return;
+  el.classList.add('bye');
+  setTimeout(() => { el.hidden = true; el.classList.remove('go', 'bye'); cancelAnimationFrame(fxRaf); drawChecks(endPop); if(endRec) notify(endRec);
+    if(!dashOpen && !reduced()){ const tb = $('dashTab'); tb.classList.remove('bump'); void tb.offsetWidth; tb.classList.add('bump'); } }, reduced() ? 0 : 520);
+}
+function notifOn(on){ $('notif').classList.toggle('show', on); app.classList.toggle('notifOn', on); }
+function notify(R){
+  const pl = realPlace(R.place), n = $('notif');
+  const g = geoOf(R);
+  n.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="${PIN}"/></svg><span class="nfx"><span>${hhmm(minsOf(R.t))} · ${pl ? esc(pl.name.toLowerCase()) : g ? 'new spot · name it?' : 'add a place?'}</span>${g ? `<small>${fmtGeo(g)}</small>` : ''}</span>`;
+  n.dataset.id = R.id; n.style.top = Math.round($('temp').getBoundingClientRect().top - app.getBoundingClientRect().top + 5) + 'px'; notifOn(true);
+  clearTimeout(notifT); notifT = setTimeout(() => notifOn(false), 7000);
+}
+/* swipe vertically: up is better. It glides while you drag and settles on a level when you let go. */
+const RH = 96;
+let drag = null, anim = null, wheelT = null, goal = null;   /* goal: the level a running glide is heading for, so quick key presses add up */
+function settle(to, then){
+  cancelAnimationFrame(anim);
+  to = Math.max(0, Math.min(600, Math.round(to/100)*100)); goal = to;
+  const done = () => { goal = null; paintDraft(); paint(); if(then) then(); };
+  if(reduced()){ D.v = to; done(); return; }
+  const from = D.v, t0 = performance.now();
+  const step = now => { const q = Math.min(1, (now - t0)/260), e = 1 - Math.pow(1-q, 3); D.v = from + (to - from)*e; paint(); if(q < 1) anim = requestAnimationFrame(step); else done(); };
+  anim = requestAnimationFrame(step);
+}
+/* letting go is the log: no button. While a check-in is still open (and fresh), another swipe corrects it instead of adding a second one. */
+let keyT = null;
+function commit(){
+  clearTimeout(keyT); if(drag || ui.drag || ui.noticed) return;
+  const lv = lvOf(D.v), A = ui.adjust ? logById(ui.adjust) : null; ui.adjust = null;
+  if(A && Date.now() - A.t < 180000){
+    if(A.v !== lv){ A.v = lv; A.core = ''; A.word = ''; if(A.mark && !canMark(A, A.mark)) delete A.mark; } save();
+    ui.day = TODAY(); ui.noticed = A.id; paintDraft(); renderChart(); return; }
+  realize();
+}
+const temp = $('temp');
+temp.addEventListener('pointerdown', e => { cancelAnimationFrame(anim); goal = null; drag = {y:e.clientY, v:D.v, moved:false}; try{ temp.setPointerCapture(e.pointerId); }catch(_){} });
+temp.addEventListener('pointermove', e => {
+  if(!drag) return;
+  const dy = drag.y - e.clientY; if(Math.abs(dy) > 3 && !drag.moved){ drag.moved = true; ui.drag = true; unNotice(); }
+  if(!drag.moved) return;
+  D.v = Math.max(0, Math.min(600, drag.v + dy*(100/RH))); D.touched = true; paint();
+});
+const endDrag = () => { if(!drag) return; const d = drag; drag = null; ui.drag = false;
+  if(!d.moved && ui.noticed) return;      /* a tap while a check-in is open does nothing */
+  D.touched = true; settle(D.v, commit); };
+temp.addEventListener('pointerup', endDrag); temp.addEventListener('pointercancel', endDrag);
+temp.addEventListener('wheel', e => { e.preventDefault(); cancelAnimationFrame(anim); goal = null; ui.drag = true; unNotice();
+  D.v = Math.max(0, Math.min(600, D.v - e.deltaY*0.5)); D.touched = true; paint();
+  clearTimeout(wheelT); wheelT = setTimeout(() => { ui.drag = false; settle(D.v, commit); }, 420); }, {passive:false});
+temp.addEventListener('keydown', e => {
+  if(e.target !== temp) return;
+  const k = {ArrowUp:100, ArrowRight:100, ArrowDown:-100, ArrowLeft:-100, PageUp:200, PageDown:-200}[e.key];
+  const later = () => { clearTimeout(keyT); keyT = setTimeout(commit, 900); };
+  if(k){ e.preventDefault(); D.touched = true; unNotice(); settle((goal != null ? goal : Math.round(D.v/100)*100) + k); later(); }
+  else if(e.key === 'Home'){ e.preventDefault(); D.touched = true; unNotice(); settle(0); later(); }
+  else if(e.key === 'End'){ e.preventDefault(); D.touched = true; unNotice(); settle(600); later(); }
+  else if(e.key === 'Enter'){ e.preventDefault(); D.touched = true; clearTimeout(keyT); if(goal != null) settle(goal, commit); else commit(); }
+});
+
+/* ---------- the curve on top, in white ---------- */
+/* a gentle wave: every value is softened by its neighbours in time, and the line is flat at each peak and dip */
+const SIG = 80;
+const soften = (pts, sig) => pts.map(([m]) => { let a = 0, w = 0; pts.forEach(([m2, v2]) => { const k = Math.exp(-0.5*((m - m2)/sig)**2); a += k*v2; w += k; }); return a/w; });
+function spline(P, lo, hi){
+  const n = P.length, S = [], K = 14, h = 0.42, cl = v => Math.max(lo, Math.min(hi, v));
+  const m = P.map((p,i) => { if(!i || i === n-1) return 0;
+    const a = (p[1] - P[i-1][1])/Math.max(.001, p[0] - P[i-1][0]), b = (P[i+1][1] - p[1])/Math.max(.001, P[i+1][0] - p[0]);
+    return a*b <= 0 ? 0 : 2*a*b/(a + b); });
+  for(let i=0;i<n-1;i++){ const p1 = P[i], p2 = P[i+1], dx = p2[0]-p1[0], c1 = [p1[0] + dx*h, p1[1] + m[i]*dx*h], c2 = [p2[0] - dx*h, p2[1] - m[i+1]*dx*h];
+    for(let k = i ? 1 : 0; k <= K; k++){ const t = k/K, u = 1-t;
+      S.push([u*u*u*p1[0] + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*p2[0], cl(u*u*u*p1[1] + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*p2[1])]); } }
+  return S;
+}
+const pathOf = S => S.map((p,i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+function renderChart(){
+  const el = $('chart'), W = el.clientWidth || 398, H = W < 340 || innerHeight < 600 ? 96 : 118, wk = ui.scope === 'week';
+  const L = 6, R = 6, T = 10, B = 20, x0 = L, x1 = W - R, y0 = T, y1 = H - B, yb = y1 + 5;
+  const y = v => y0 + (6-v)/6*(y1-y0);
+  Gc = null;
+  $('dayLabel').textContent = wk ? 'last 7 days' : dayTitle(ui.day);
+  $('prev').style.visibility = $('next').style.visibility = wk ? 'hidden' : '';
+  $('next').disabled = ui.day >= TODAY();
+  document.querySelectorAll('#scopeTg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.scope === ui.scope));
+  $('exNote').hidden = !store.logs.some(l => l.ex);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${wk ? 'Your feelings over the last seven days' : 'Your feelings through the day, from 6 in the morning'}. Higher is better.">
+    <defs><linearGradient id="wf" x1="0" x2="0" y1="${y0}" y2="${yb}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".3"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient>
+      <linearGradient id="heat" x1="0" x2="0" y1="${y(6)}" y2="${y(0)}" gradientUnits="userSpaceOnUse">${LV.map((l,i) => `<stop offset="${((6-i)/6).toFixed(3)}" stop-color="${l.color}"/>`).reverse().join('')}</linearGradient></defs>
+    <line class="mid" x1="${x0}" x2="${x1}" y1="${y(3)}" y2="${y(3)}"/>`;
+  const curve = P => { if(P.length < 2) return ''; const S = spline(P, y0-3, y1+3), d = pathOf(S);
+    return `<path d="${d}L${S[S.length-1][0].toFixed(1)} ${yb}L${S[0][0].toFixed(1)} ${yb}Z" fill="url(#wf)" pointer-events="none"/><path class="lineb" d="${d}" pointer-events="none"/><path class="line" d="${d}" stroke="url(#heat)" pointer-events="none"/>`; };
+  if(wk){
+    const days = Array.from({length:7}, (_,i) => addDays(TODAY(), i-6)), cw = (x1-x0)/7, all = [], raw = [];
+    /* the week line is calmer than the day line: each day is averaged into four parts (morning, afternoon, evening, night) */
+    days.forEach((k,i) => { const bins = [[],[],[],[]]; logsFor(k).forEach(l => bins[Math.min(3, Math.floor(dm(l.t)/360))].push(l));
+      bins.forEach(b => { if(b.length) raw.push([i*1440 + b.reduce((a,l) => a + dm(l.t), 0)/b.length, b.reduce((a,l) => a + l.v, 0)/b.length]); }); });
+    const wv = soften(raw, 330); raw.forEach(([m], i) => all.push([x0 + m/1440*cw, y(wv[i])]));
+    days.forEach((k,i) => { const d = parseKey(k);
+      if(i) s += `<line class="sep" x1="${(x0+i*cw).toFixed(1)}" x2="${(x0+i*cw).toFixed(1)}" y1="${y0}" y2="${yb}"/>`;
+      s += `<text class="lbl${k === TODAY() ? ' on' : ''}" x="${(x0+(i+.5)*cw).toFixed(1)}" y="${H-4}" text-anchor="middle">${d.toLocaleDateString(undefined,{weekday:'short'})}</text>`; });
+    s += curve(all);
+    all.forEach(p => { s += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="1.5" fill="currentColor" pointer-events="none"/>`; });
+    days.forEach((k,i) => { s += `<rect class="wkd" data-k="${k}" x="${(x0+i*cw).toFixed(1)}" y="0" width="${cw.toFixed(1)}" height="${H}" tabindex="0" role="button" aria-label="Open ${parseKey(k).toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'})}"/>`; });
+    /* each day's crown and skull ride on the week line, above the moment they belong to */
+    const put = [];   /* signs that would overlap are stacked */
+    if(all.length) days.forEach((k,i) => logsFor(k).forEach(l => { if(!l.mark) return; const mx = x0 + (i + dm(l.t)/1440)*cw; let j = 0; while(j < all.length - 1 && all[j+1][0] < mx) j++;
+      const A = all[j], B = all[Math.min(all.length - 1, j + 1)], f = B[0] > A[0] ? Math.max(0, Math.min(1, (mx - A[0])/(B[0] - A[0]))) : 0;
+      let my = A[1] + (B[1] - A[1])*f - 12; while(put.some(q => Math.abs(q[0] - mx) < 11 && Math.abs(q[1] - my) < 10)) my -= 11;
+      put.push([mx, my]); s += mkIcon(l, mx, my, 10.5); }));
+  } else {
+    const logs = logsFor(ui.day), isToday = ui.day === TODAY(), x = m => x0 + m/1440*(x1-x0), nowM = dm(Date.now());
+    for(let h=0; h<=24; h+=6) s += `<text class="lbl" x="${x(h*60).toFixed(1)}" y="${H-4}" text-anchor="${h===0 ? 'start' : h===24 ? 'end' : 'middle'}">${pad((h+6)%24)}:00</text>`;
+    const sv = soften(logs.map(l => [dm(l.t), l.v]), SIG), P = logs.map((l,i) => [x(dm(l.t)), y(sv[i])]);
+    s += curve(P);
+    if(!logs.length) s += `<text class="none" x="${W/2}" y="${y(3)-10}" text-anchor="middle">${isToday ? 'nothing captured yet today' : 'nothing captured this day'}</text>`;
+    if(isToday){
+      const nx = x(nowM), last = P.length ? P[P.length-1] : null;
+      s += `<line class="nowl" x1="${nx.toFixed(1)}" x2="${nx.toFixed(1)}" y1="${y0}" y2="${yb}"/>`;
+      if(last) s += `<line id="ghostL" x1="${last[0].toFixed(1)}" y1="${last[1].toFixed(1)}" x2="${nx.toFixed(1)}" y2="${y(3)}" style="display:none"/>`;
+      s += `<circle id="ghost" cx="${nx.toFixed(1)}" cy="${y(3)}" r="5" style="display:none"/>`;
+      Gc = {y: v => { let a = v, w = 1; logs.forEach(l => { const k = Math.exp(-0.5*((nowM - dm(l.t))/SIG)**2); a += k*l.v; w += k; }); return y(a/w); }, last};
+    }
+    logs.forEach((l,i) => { const bare = !(l.word || l.core) && !l.note;
+      s += `<g class="pt" data-id="${l.id}" tabindex="0" role="button" aria-label="${hhmm(minsOf(l.t))}, ${esc(labelOf(l))}${l.note ? ', ' + esc(noteLine(l.note)) : ''}"><circle cx="${P[i][0].toFixed(1)}" cy="${P[i][1].toFixed(1)}" r="11" fill="transparent"/><circle class="d${bare ? ' bare' : ''}" cx="${P[i][0].toFixed(1)}" cy="${P[i][1].toFixed(1)}" r="3.4"/></g>`; });
+    logs.forEach((l,i) => { if(l.mark) s += mkIcon(l, P[i][0], P[i][1] - 16, 13); });
+  }
+  el.innerHTML = s + '</svg>';
+  { const wb = $('wrapBtn'), st = checkState(), isT = ui.day === TODAY(), seen = (store.seen || {})[TODAY()];
+    wb.hidden = wk || !logsFor(ui.day).length;
+    wb.textContent = isT ? (st.done >= 4 ? 'your day is ready →' : 'today so far →') : `replay ${dayTitle(ui.day)}’s wrap-up →`;
+    $('checks').hidden = wk; const ww = $('wkWraps'); ww.hidden = !wk;
+    if(wk) ww.innerHTML = `<div class="ckrow">${Array.from({length:7}, (_,i) => addDays(TODAY(), i-6)).map((k, i) => { const ls = logsFor(k), d = parseKey(k);
+      return `<button type="button" data-wrapday="${k}"${ls.length ? '' : ' disabled'} aria-label="${ls.length ? 'Replay the wrap-up of' : 'Nothing logged on'} ${d.toLocaleDateString(undefined, {weekday:'long', month:'long', day:'numeric'})}"><span class="ck${ls.length ? '' : ' zz'}">${ls.length ? tinyFace('done', Math.round(avgV(ls)), i) : `<svg viewBox="-13 -13 26 26" aria-hidden="true"><path d="${blobD(10, i + 1)}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 2.6"/></svg>`}</span><u>${d.toLocaleDateString(undefined, {weekday:'short'})}</u></button>`; }).join('')}</div><em>tap a day to replay its wrap-up</em>`;
+    wb.classList.toggle('ready', isT && st.done >= 4 && !seen); $('dashTab').classList.toggle('ready', st.done >= 4 && !seen); }
+  if(dashOpen && !pd) dash.style.height = $('dashIn').offsetHeight + 'px';
+  paint();
+}
+const logById = id => store.logs.find(l => l.id === id);
+function go(n){ if(ui.scope !== 'day') return; const k = addDays(ui.day, n); if(k > TODAY()) return; ui.day = k; renderChart(); }
+const chart = $('chart');
+let swiped = false, sw = null;
+chart.addEventListener('click', e => {
+  if(swiped) return;
+  const mk = e.target.closest('.mk'); if(mk){ const l = logById(mk.dataset.mk); if(l) openSheet('chat', l); return; }
+  const g = e.target.closest('.pt'); if(g){ const l = logById(g.dataset.id); if(l) openSheet('entry', l); return; }
+  const w = e.target.closest('.wkd'); if(w){ ui.day = w.dataset.k; ui.scope = 'day'; renderChart(); }
+});
+chart.addEventListener('keydown', e => { if(e.key !== 'Enter' && e.key !== ' ') return; const t = e.target.closest('.mk, .pt, .wkd'); if(t){ e.preventDefault(); t.dispatchEvent(new MouseEvent('click', {bubbles:true})); } });
+chart.addEventListener('touchstart', e => { const t = e.touches[0]; sw = {x:t.clientX, y:t.clientY}; }, {passive:true});
+chart.addEventListener('touchend', e => { if(!sw) return; const t = e.changedTouches[0], dx = t.clientX - sw.x, dy = t.clientY - sw.y; sw = null;
+  if(Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)*1.6){ swiped = true; setTimeout(() => swiped = false, 350); go(dx < 0 ? 1 : -1); } }, {passive:true});
+function hideTip(){ $('infobox').hidden = true; }
+function showTip(g){
+  const l = logById(g.dataset.id); if(!l) return;
+  const box = $('infobox'), detail = l.word ? `${l.core} › ${l.word}` : l.core, pl = realPlace(l.place);
+  box.innerHTML = `<b>${hhmm(minsOf(l.t))} · ${esc(LV[l.v].name)}</b>${l.mark ? `<small>${MKN[l.mark]}</small>` : ''}${detail ? `<span>${esc(detail)}</span>` : ''}${l.note ? `<q>${esc(noteLine(l.note))}</q>` : ''}${l.when && WHEN[l.when] ? `<small>${WHEN[l.when]}</small>` : ''}${pl || geoOf(l) ? `<small>📍 ${[pl ? esc(pl.name) : '', geoOf(l) ? fmtGeo(geoOf(l)) : ''].filter(Boolean).join(' · ')}</small>` : ''}${!detail && !l.note ? '<small>Tap to add the exact feeling or a comment.</small>' : ''}`;
+  box.hidden = false;
+  const r = (g.querySelector('.d') || g.querySelector('.dot') || g).getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+  let x = r.left + r.width/2 - w/2; x = Math.max(8, Math.min(innerWidth - w - 8, x));
+  let yy = r.bottom + 10; if(yy + h > innerHeight - 8) yy = r.top - h - 10;
+  box.style.left = x + 'px'; box.style.top = yy + 'px';
+}
+document.addEventListener('pointerover', e => { if(e.pointerType !== 'mouse') return; const g = e.target.closest && e.target.closest('.pt'); if(g) showTip(g); else hideTip(); });
+document.addEventListener('focusin', e => { const g = e.target.closest && e.target.closest('.pt'); if(g) showTip(g); else hideTip(); });
+
+/* ---------- "Feeling realized": log it ---------- */
+function locate(){
+  return new Promise(res => {
+    if(!navigator.geolocation) return res(null);
+    let done = false; const t = setTimeout(() => { done = true; res(null); }, 12000);
+    try{ navigator.geolocation.getCurrentPosition(p => { if(done) return; done = true; clearTimeout(t); res({lat:p.coords.latitude, lng:p.coords.longitude}); },
+      () => { if(done) return; done = true; clearTimeout(t); res(null); }, {timeout:12000, maximumAge:120000}); }catch(e){ clearTimeout(t); res(null); }
+  });
+}
+const dist = (a,b) => { const k = Math.cos(a.lat*Math.PI/180), dx = (a.lng-b.lng)*k, dy = a.lat-b.lat; return Math.hypot(dx,dy)*111320; };
+function realize(){
+  if(ui.noticed) return;
+  const lv = lvOf(D.v);
+  const rec = {id:'l' + Date.now().toString(36) + Math.random().toString(36).slice(2,5), t:Date.now(), v:lv, core:'', word:'', note:'', place:'', geo:null, af:store.logs.filter(l => !l.ex).length % AFFIRM.length};
+  store.logs.push(rec); save();
+  notifOn(false);
+  /* the place is added by itself when the device shares its location: a named spot within 200 m is recognised */
+  locate().then(g => { if(!g || !logById(rec.id)) return; rec.geo = g;
+    const near = store.places.filter(p => p.lat != null).map(p => [dist(g,p), p]).sort((a,b) => a[0]-b[0])[0];
+    if(near && near[0] < 200 && !rec.place) rec.place = near[1].id; save(); });
+  const from = $('face').getBoundingClientRect();
+  if(reduced()) toast('Noticed!');
+  ui.day = TODAY(); ui.noticed = rec.id;      /* the palette and the speech bubble pop out now, for this feeling */
+  paintDraft(); renderChart();
+  const target = dashOpen ? chart.querySelector(`.pt[data-id="${rec.id}"]`) || chart : $('dashTab');
+  if(!reduced()){
+    const tr = (target.querySelector && target.querySelector('.d') || target).getBoundingClientRect();
+    if(target.classList && target.classList.contains('pt')) target.style.opacity = 0;
+    const f = document.createElement('div'); f.className = 'fly'; f.style.left = (from.left + from.width/2) + 'px'; f.style.top = (from.top + from.height/2) + 'px';
+    document.body.appendChild(f);
+    const dx = tr.left + tr.width/2 - (from.left + from.width/2), dy = tr.top + tr.height/2 - (from.top + from.height/2);
+    const a = f.animate([{transform:'translate(0,0) scale(3)', opacity:.9}, {transform:`translate(${dx*0.5}px,${dy*0.6}px) scale(1.6)`, opacity:1, offset:.55}, {transform:`translate(${dx}px,${dy}px) scale(.35)`, opacity:1}], {duration:720, easing:'cubic-bezier(.5,0,.2,1)'});
+    const land = () => { f.remove(); const tg = chart.querySelector(`.pt[data-id="${rec.id}"]`); if(tg){ tg.style.opacity = ''; tg.classList.add('land'); }
+      if(!dashOpen){ const tb = $('dashTab'); tb.classList.remove('bump'); void tb.offsetWidth; tb.classList.add('bump'); } };
+    a.finished.then(land, land);
+  }
+}
+
+/* ---------- sheets ---------- */
+let SH = null, chatTimer = null;
+const tv = T => T === D ? lvOf(D.v) : T.v;
+const mine = () => { if(SH && SH.isLog) delete SH.T.ex; };
+function openSheet(kind, T, back, flow){
+  hideTip(); clearTimeout(chatTimer); SH = {kind, T, back, flow, isLog: !!T && T !== D};
+  const sh = $('sheet'), lv = T ? tv(T) : 3, g = T === D ? colorsAt(D.v) : LV[lv].c;
+  const X = `<button type="button" class="x" data-a="close" aria-label="${back ? 'Back' : 'Close'}"><svg width="16" height="16" viewBox="0 0 16 16">${back ? '<path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' : '<path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'}</svg></button>`;
+  const shInk = inkAt(T === D ? D.v : lv*100);
+  let body, actions = '';
+  if(kind === 'wheel'){
+    body = `<div class="sh-top">${X}<button type="button" class="textbtn" id="shClear" data-a="clearword" hidden>clear</button></div><h2>what’s the closest word?</h2><p class="sub">you said <b>${esc(LV[lv].name.toLowerCase())}</b>. tap the face that fits best.</p>
+      <div class="cores" id="shCores"></div><div class="branch" id="shBranch" aria-hidden="true"></div><div class="words" id="shWords"></div>`;
+  } else if(kind === 'chat'){
+    body = `<div class="sh-top">${X}<p class="profhead big">Track the cause!</p><span style="width:38px"></span></div>
+      <div class="msgs" id="shMsgs" aria-live="polite"></div>`;
+    actions = `<div class="chatdock" id="shDock"></div>`;
+  } else if(kind === 'calm'){
+    const C = CALM[lv];
+    body = `<div class="sh-top">${X}<p class="profhead">back to center<small>for when you feel ${esc(LV[lv].name.toLowerCase())}</small></p><span style="width:38px"></span></div>
+      <div class="calmart">${C.art}</div><h2>${C.t}</h2><p class="sub calmhow">${C.how}</p><p class="calmwhy">${C.why}</p>${lv === 0 ? '<p class="calmwhy">If it feels like too much to carry alone, reach out to someone you trust or a local support line.</p>' : ''}`;
+    actions = `<div class="sh-actions"><button type="button" class="btn w" data-a="close">I’m back</button></div>`;
+  } else if(kind === 'wrap'){
+    body = `<div class="wr" id="wr"></div>`;
+  } else if(kind === 'place'){
+    body = `<div class="sh-top">${X}</div><h2>where was this?</h2><p class="sub">pick a place. paste its coordinates for the exact spot.</p><div id="shPlaces"></div>`;
+    actions = `<div class="sh-actions"><button type="button" class="btn w" data-a="close">Done</button></div>`;
+  } else if(kind === 'entry'){
+    const det = (T.core ? (T.word ? T.core + ' › ' + T.word : T.core).toLowerCase() : 'no exact word yet') + (T.when && WHEN[T.when] ? ' · ' + WHEN[T.when] : '');
+    body = `<div class="sh-top">${X}<label class="when">${esc(dayTitle(dk(T.t)))} at<input type="time" id="shTime" value="${hhmm(minsOf(T.t))}" aria-label="Time"></label><span style="width:38px"></span></div>
+      <div class="eface">${miniFace(T.word || T.core || '', lv, 1)}</div><h2 class="big">${esc(LV[lv].name.toLowerCase())}</h2><p class="sub">${esc(det)}</p>
+      ${T.note ? `<p class="equote">“${esc(noteLine(T.note))}”</p>` : ''}
+      <div class="icons static"><button type="button" class="ib${T.core ? ' set' : ''}" data-a="towheel" aria-label="Name the exact feeling">${ICON_PAL}</button><button type="button" class="ib${T.note ? ' set' : ''}" data-a="tochat" aria-label="Talk about what caused it">${ICON_SAY}</button>${['skull','crown'].filter(m => canMark(T, m)).map(m => `<button type="button" class="ib${T.mark === m ? ' set' : ''}" data-a="mark" data-m="${m}" aria-pressed="${T.mark === m}" aria-label="${m === 'crown' ? 'Highlight' : 'Low point'} of the day"><svg class="mki" viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="${MK[m]}"/></svg></button>`).join('')}</div>
+      <p class="sec-h">where</p><div id="shPlaces"></div>`;
+    actions = `<div class="sh-actions"><button type="button" class="btn g" data-a="del">Delete</button><button type="button" class="btn w" data-a="close">Done</button></div>`;
+  } else {   /* places map */
+    body = `<div class="sh-top">${X}<div class="seg" id="mapSeg" role="group" aria-label="Range"><button type="button" data-ms="day">${esc(dayTitle(ui.day))}</button><button type="button" data-ms="all">All days</button></div><span style="width:38px"></span></div>
+      <h2>where you felt what</h2><div class="mapcard"><div class="map" id="shMap"></div></div><p class="sec-h" style="opacity:1;color:var(--muted);font-family:var(--font-display)">exact spots</p><div class="spots" id="shSpots"></div>`;
+    actions = `<div class="sh-actions"><button type="button" class="btn w" data-a="close">Done</button></div>`;
+  }
+  sh.innerHTML = `<div class="sh${kind === 'map' ? ' plain' : ''}${kind === 'chat' ? ' chat' : ''}${kind === 'wrap' ? ' wrapsh' : ''}" id="shBox" role="dialog" aria-modal="true" style="--g1:${g[0]};--g2:${g[1]};${shInk.css()}">${body}${actions}</div>`;
+  sh.hidden = false;
+  if(kind === 'wheel') drawWheel();
+  if(kind === 'chat') drawChat(false);
+  if($('shPlaces')) drawPlaces();
+  if($('shMap')) drawMap();
+}
+function closeSheet(){
+  if(!SH) return; clearTimeout(chatTimer);
+  const {back, T, isLog, flow} = SH; if(isLog) save();
+  if(back){ openSheet(back, T); return; }
+  SH = null; $('sheet').hidden = true; $('sheet').innerHTML = '';
+  paintDraft(); renderChart();
+  /* back on the check-in: with both the exact feeling and the cause filled in there is nothing left to add, so it wraps up */
+  if(flow){ const R = noticedRec(); if(R && R.core && R.note) ending(); }
+}
+/* the exact feeling: a row of little faces; pick one and its closer feelings branch out underneath. Picking one of those accepts it. */
+function drawWords(){
+  const T = SH.T, lv = tv(T), sel = WHEEL[lv].find(([c]) => c === T.core), el = $('shWords'), br = $('shBranch');
+  el.classList.toggle('has', !!T.word); $('shClear').hidden = !T.core;
+  el.innerHTML = sel ? sel[1].map((w,i) => `<button type="button" class="fc${T.word === w ? ' on' : ''}" data-word="${esc(w)}" style="--i:${i}" aria-pressed="${T.word === w}">${miniFace(w, lv, i + 3)}<span>${esc(w.toLowerCase())}</span></button>`).join('') + `<button type="button" class="justcore" data-a="accept">just ${esc(T.core.toLowerCase())}, that’s it</button>`
+    : `<p class="words-hint">its closer feelings will branch out here.</p>`;
+  const on = sel && $('shCores').querySelector('.fc.on');
+  if(on){ const b = br.getBoundingClientRect(), r = on.getBoundingClientRect(), W = b.width || 340, H = b.height || 44, cx = (r.left + r.width/2 - b.left).toFixed(1);
+    br.innerHTML = `<svg viewBox="0 0 ${W.toFixed(0)} ${H}" preserveAspectRatio="none">${[.25,.75].map(f => `<path pathLength="1" d="M${cx} 0V${H*.2}C${cx} ${H*.8} ${(W*f).toFixed(1)} ${H*.4} ${(W*f).toFixed(1)} ${H}"/>`).join('')}</svg>`;
+  } else br.innerHTML = '';
+}
+function drawWheel(){
+  const T = SH.T, lv = tv(T), el = $('shCores');
+  el.classList.toggle('has', !!T.core);
+  el.innerHTML = WHEEL[lv].map(([c], i) => `<button type="button" class="fc${T.core === c ? ' on' : ''}" data-core="${esc(c)}" style="--i:${i}" aria-pressed="${T.core === c}">${miniFace(c, lv, i)}<span>${esc(c.toLowerCase())}</span></button>`).join('');
+  drawWords();
+}
+function popFace(el){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); setTimeout(() => el.classList.remove('pop'), 520); }
+function accept(delay){ if(SH.isLog) save(); clearTimeout(chatTimer); chatTimer = setTimeout(() => { if(SH && SH.kind === 'wheel') closeSheet(); }, reduced() ? 150 : delay); }
+function pickFace(el){
+  const T = SH.T; mine();
+  if(el.dataset.core){
+    if(T.core !== el.dataset.core){ T.core = el.dataset.core; T.word = ''; }
+    const box = $('shCores'); box.classList.add('has');
+    box.querySelectorAll('.fc').forEach(b => { const on = b.dataset.core === T.core; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+    drawWords(); if(SH.isLog) save();
+  } else {
+    T.word = el.dataset.word;
+    const box = $('shWords'); box.classList.add('has');
+    box.querySelectorAll('.fc').forEach(b => { const on = b.dataset.word === T.word; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+    accept(650);
+  }
+  if(!reduced()) popFace(el);
+}
+/* the comment, as a small conversation: what caused it, then whether it is behind you or ahead of you */
+const CAUSES = ['someone I was with','work','my body','something I read','being alone','no idea, honestly'];
+const WHEN = {past:'a past event', future:'a future prospect', now:'happening right now'};
+const WHEN_Q = 'Was it a past event or a future prospect?';
+const WHEN_REPLY = {
+  low:{past:'It’s behind you now. You’re safe.', future:'It hasn’t happened yet. Breathe.', now:'You’re in it. I’m with you.'},
+  mid:{past:'It’s behind you now.', future:'It hasn’t happened yet.', now:'Good that you noticed.'},
+  high:{past:'A lovely memory. Keep it.', future:'Something to look forward to.', now:'Enjoy it. It’s yours.'}};
+const REPLIES = {low:'Thank you for telling me.', mid:'I hear you.', high:'Love that.'};
+const tone = lv => lv <= 2 ? 'low' : lv === 3 ? 'mid' : 'high';
+const chatNotes = T => (T.note || '').split('\n').filter(Boolean);
+const chatDown = () => { const box = $('shBox'); if(box) box.scrollTop = box.scrollHeight; };
+function addMsg(who, html, cls, idx){
+  const m = document.createElement(who === 'me' ? 'button' : 'div'); let node = m;
+  m.className = 'msg ' + who + (cls ? ' ' + cls : ''); m.innerHTML = html;
+  if(who === 'me'){ m.type = 'button'; m.dataset.i = idx; m.setAttribute('aria-label', 'Remove: ' + m.textContent); }
+  else { node = document.createElement('div'); node.className = 'brow' + (cls ? ' ' + cls : ''); node.innerHTML = `<span class="av">${PROF_SVG}</span>`; node.appendChild(m); }
+  $('shMsgs').appendChild(node); chatDown(); return m;
+}
+function flushTyping(){ clearTimeout(chatTimer); $('shMsgs').querySelectorAll('.msg.bot[data-t]').forEach(m => { m.innerHTML = esc(m.dataset.t); delete m.dataset.t; m.closest('.brow').classList.remove('think'); }); }
+function botSay(text, delay, then){
+  if(reduced() || !delay){ addMsg('bot', esc(text)); if(then) then(); return; }
+  const m = addMsg('bot', '<span class="typing" aria-label="typing"><i></i><i></i><i></i></span>'); m.dataset.t = text; m.closest('.brow').classList.add('think');
+  chatTimer = setTimeout(() => { if(!m.isConnected) return; m.innerHTML = esc(text); delete m.dataset.t; m.closest('.brow').classList.remove('think'); chatDown(); if(then) then(); }, delay);
+}
+function drawDock(){
+  const T = SH.T, notes = chatNotes(T), el = $('shDock'); if(!el) return;
+  el.innerHTML = notes.length && !T.when
+    ? `<div class="quick big" id="shQuick">${Object.entries(WHEN).map(([k,v]) => `<button type="button" data-when="${k}">${esc(v[0].toUpperCase() + v.slice(1))}</button>`).join('')}</div>`
+    : `<div class="quick" id="shQuick">${notes.length ? '' : CAUSES.map(q => `<button type="button" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+      <form class="chatbar" id="shChat" autocomplete="off"><input id="shSay" maxlength="160" placeholder="${notes.length ? 'anything else?' : 'type it here…'}" aria-label="Your answer"><button type="submit" aria-label="Send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button></form>`;
+}
+function drawChat(instant){
+  const T = SH.T, lv = tv(T), label = labelOf(T).toLowerCase(), notes = chatNotes(T);
+  $('shMsgs').innerHTML = '';
+  const opener = lv <= 2 ? `That sounds hard. I’m here. What caused this feeling?` : lv === 3 ? `I hear you. What caused this feeling?` : `So glad. What caused this feeling?`;
+  if(notes.length || instant){
+    addMsg('bot', esc(opener), 'now'); notes.forEach((n,i) => addMsg('me', esc(n), 'now', i));
+    if(notes.length){ addMsg('bot', esc(WHEN_Q), 'now'); if(T.when && WHEN[T.when]){ addMsg('me', esc(WHEN[T.when]), 'now', 'when'); addMsg('bot', 'Anything else?', 'now'); } }
+  } else botSay(opener, 900);
+  drawDock();
+}
+function userSay(text){
+  text = text.trim(); if(!text) return;
+  const T = SH.T, notes = chatNotes(T); mine(); flushTyping();
+  notes.push(text.slice(0, 160)); T.note = notes.join('\n'); if(SH.isLog) save();
+  addMsg('me', esc(text), '', notes.length - 1);
+  const lv = tv(T);
+  botSay(T.when ? REPLIES[tone(lv)] : WHEN_Q, 850);
+  drawDock(); const i = $('shSay'); if(i) i.focus();
+}
+function sayWhen(k){
+  const T = SH.T; if(!WHEN[k]) return; mine(); flushTyping();
+  T.when = k; if(SH.isLog) save();
+  addMsg('me', esc(WHEN[k]), '', 'when'); $('shDock').innerHTML = '';
+  /* the last answer closes the conversation by itself */
+  botSay(WHEN_REPLY[tone(tv(T))][k], 800, () => { chatTimer = setTimeout(() => { if(SH && SH.kind === 'chat') closeSheet(); }, 2000); });
+}
+/* ---------- the wrap-up: the day told back as a short story of cards ---------- */
+const THEMES = [['People', /friend|family|colleague|someone|dinner|lunch|team|games|mum|mom|dad|partner|kid|date|call/i], ['Work', /work|meeting|deadline|office|review|inbox|shipped|workshop|boss|project|email/i], ['Your body', /sleep|slept|run|tired|body|gym|hike|walk|food|breakfast|sick|bike|coffee/i], ['Time alone', /alone|lonely|quiet|myself/i], ['The outside world', /read|news|train|commute|traffic|weather|movie|money/i]];
+const BINS = ['mornings','afternoons','evenings','nights'];
+const lvName = v => LV[Math.max(0, Math.min(6, Math.round(v)))].name.toLowerCase();
+const avgV = a => a.reduce((x,l) => x + l.v, 0)/a.length;
+const fmtDur = ms => { const m = Math.max(1, Math.round(ms/60000)), h = Math.floor(m/60); return h ? `${h}h ${pad(m%60)}m` : `${m} min`; };
+const tOf = l => hhmm(minsOf(l.t));
+let WR = null;
+const wrSkip = {};
+/* the day's arc, named */
+function dayShape(L){
+  const v = L.map(l => l.v), n = v.length; if(n < 2) return 'A single moment';
+  const mn = Math.min(...v), mx = Math.max(...v), iMn = v.indexOf(mn), iMx = v.indexOf(mx), a = avgV(L), d = v[n-1] - v[0];
+  let turns = 0; for(let i = 1; i < n-1; i++) if((v[i]-v[i-1])*(v[i+1]-v[i]) < 0) turns++;
+  if(mx - mn <= 1) return a >= 4 ? 'Steady and bright' : a <= 2.2 ? 'Steady and heavy' : 'A steady day';
+  if(iMn > 0 && iMn < n-1 && v[n-1] - mn >= 3 && v[n-1] >= v[0]) return 'A comeback';
+  if(turns >= 4 && mx - mn >= 3) return 'A rollercoaster';
+  if(d >= 2) return 'A slow climb';
+  if(d <= -2) return 'A day that wore down';
+  if(iMx > 0 && iMx < n-1) return 'A bright middle';
+  return 'A day of its own';
+}
+/* a low moment starts when the mood drops under okay, and has passed at the next check-in at okay or better */
+function lowsOf(S){ const out = [];
+  for(let i = 0; i < S.length; i++) if(S[i].v <= 2 && (i === 0 || S[i-1].v >= 3)){ let j = i + 1, worst = S[i]; while(j < S.length && S[j].v <= 2){ if(S[j].v < worst.v) worst = S[j]; j++; } out.push({at:S[i], worst, back:S[j] || null}); }
+  return out; }
+function buildWrap(k, keepI){
+  const day = logsFor(k), real = day.filter(l => !l.ex), L = real.length ? real : day; if(!L.length) return null;
+  const wkAll = []; for(let d = 6; d >= 0; d--) wkAll.push(...logsFor(addDays(k, -d)));
+  const wkReal = wkAll.filter(l => !l.ex), W = wkReal.length >= 8 ? wkReal : wkAll, ex = L.some(l => l.ex), wex = W.some(l => l.ex);
+  const isT = k === TODAY(), dayWord = isT ? 'today' : dayTitle(k), cards = [];
+  const exNote = f => f ? '<p class="wr-ex">based on example feelings</p>' : '';
+  const cl = v => Math.max(0, Math.min(6, Math.round(v)));
+  const face = (lv, cap, name) => `<figure class="wr-face">${miniFace('', cl(lv), 2)}<figcaption>${cap ? `<span>${esc(cap)}</span>` : ''}<b>${esc(name || lvName(lv))}</b></figcaption></figure>`;
+  const LOCK = `<svg class="wr-lock" viewBox="0 0 80 80" aria-hidden="true"><rect x="18" y="34" width="44" height="34" rx="9" fill="currentColor" fill-opacity=".2" stroke="currentColor" stroke-width="4"/><path d="M27 34V25a13 13 0 0 1 26 0v9" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="40" cy="50" r="5" fill="currentColor"/></svg>`;
+  const a = avgV(L), aR = Math.round(a), hi = L.reduce((x,l) => l.v > x.v ? l : x), lo = L.reduce((x,l) => l.v < x.v ? l : x), nOk = L.filter(l => l.v >= 3).length;
+  store.guess = store.guess || {}; const g = store.guess[k];
+
+  /* 1. memory and experience. Format: a guess, then the card turns over onto a scale with two markers */
+  if(g == null && L.length > 1) cards.push({id:'memory', guess:true, lv:3, html:`<p class="wr-k">before the reveal</p><h3 class="wr-h">How was ${esc(dayWord)}?</h3><p class="wr-p">One tap, from memory.</p><div class="wr-guess">${[6,5,4,3,2,1,0].map(i => `<button type="button" data-guess="${i}">${miniFace('', i, i)}<span>${LV[i].name.toLowerCase()}</span></button>`).join('')}</div><button type="button" class="wr-skip" data-guess="-1">skip</button>`});
+  else { const has = g != null && g >= 0, d = has ? g - aR : 0, sx = i => 22 + i*39.5;
+    const scale = `<svg class="wr-scale" viewBox="0 0 281 60" role="img" aria-label="${has ? `You remembered ${lvName(g)}; your check-ins average ${lvName(aR)}` : `Your check-ins average ${lvName(aR)}`}">${[0,1,2,3,4,5,6].map(i => `<circle cx="${sx(i)}" cy="34" r="3.4" fill="currentColor" fill-opacity=".45"/>`).join('')}${has && d ? `<path class="wr-gap" pathLength="1" d="M${sx(g)} 22Q${(sx(g) + sx(aR))/2} ${14 - 5*Math.abs(d)} ${sx(aR)} 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>` : ''}${has ? `<circle cx="${sx(g)}" cy="34" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/>` : ''}<circle cx="${sx(aR)}" cy="34" r="6.5" fill="currentColor"/><text x="${sx(0)}" y="57" text-anchor="middle">awful</text><text x="${sx(6)}" y="57" text-anchor="middle">wonderful</text></svg>`;
+    cards.push({id:'memory', lv:aR, html:`<p class="wr-k">${has ? 'memory and experience' : esc(dayWord) + ' in one face'}</p><div class="wr-duo">${has ? face(g, 'you remembered') : ''}${face(aR, has ? 'you logged' : 'on average')}</div>${scale}<h3 class="wr-h">${!has ? `Mostly ${lvName(a)}.` : d <= -1 ? 'You remember it darker than you lived it.' : d >= 1 ? 'You remember it brighter than you lived it.' : 'Your memory and your day agree.'}</h3><p class="wr-p">${!has ? `${L.length} check-in${L.length > 1 ? 's' : ''}, from ${lvName(lo.v)} to ${lvName(hi.v)}.` : d <= -1 ? `${nOk} of ${L.length} check-ins were okay or better. The ${lvName(lo.v)} moment at ${tOf(lo)} is what stuck.` : d >= 1 ? `${L.length - nOk ? `${L.length - nOk} of ${L.length} check-ins were below okay. ` : ''}The ${lvName(hi.v)} moment at ${tOf(hi)} is what stuck.` : 'Rarer than it sounds. Most people keep the worst moment and the ending, and lose the rest.'}</p>${exNote(ex)}`}); }
+
+  /* asked only when the day went by without a crown or a skull */
+  const need = L.length > 1 ? ['crown','skull'].filter(m => !L.some(l => l.mark === m) && !wrSkip[k + m] && L.some(l => canMark(l, m) && !l.mark)) : [], step = need[0];
+  if(step && !(cards[0] && cards[0].guess)) cards.push({id:'marks', guess:true, lv:aR, html:`<p class="wr-k">${step === 'crown' ? 'one question first' : 'and the other end'}</p><div class="wr-mkbig"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="${MK[step]}"/></svg></div><h3 class="wr-h">${step === 'crown' ? `Which moment was the highlight of ${esc(dayWord)}?` : 'And which was the low point?'}</h3><div class="wr-pick">${L.map((l,i) => `<button type="button" data-markpick="${l.id}"${l.mark || !canMark(l, step) ? ' disabled' : ''}>${miniFace(l.word || l.core || '', l.v, i)}<b>${tOf(l)}</b><span>${esc(labelOf(l).toLowerCase())}</span></button>`).join('')}</div><button type="button" class="wr-skip" data-markskip="${step}">${step === 'crown' ? 'no highlight' : 'no low point'}</button>`});
+  /* 2. the day. Format: the curve replays, and the low is bracketed with how long it took to pass */
+  { const lowsW = lowsOf(W), passedW = lowsW.filter(e => e.back), mineL = lowsOf(L).sort((x,y) => x.worst.v - y.worst.v)[0];   /* the day's own low, from the same check-ins the curve shows */
+    const wkLine = lowsW.length < 2 ? '' : ` This week, ${passedW.length} of ${lowsW.length} low moments have already passed.`;
+    const pass = mineL && mineL.back ? `The ${lvName(mineL.worst.v)} moment at ${tOf(mineL.at)} passed in ${fmtDur(mineL.back.t - mineL.at.t)}.` : mineL ? `The ${lvName(mineL.worst.v)} moment at ${tOf(mineL.at)} ${isT ? 'is still open. It will pass too.' : 'was still open when the day ended.'}` : 'Nothing dropped under okay.';
+    let viz = `<div class="wr-duo">${face(aR, tOf(L[0]))}</div>`;
+    if(L.length > 1){ const Wd = 320, Hh = 204, t0 = dm(L[0].t), sp = Math.max(60, dm(L[L.length-1].t) - t0), even = dm(L[L.length-1].t) - t0 < 30, X = (l, i) => 30 + (even ? i/(L.length - 1) : (dm(l.t) - t0)/sp)*(Wd - 60), Y = v => 60 + (6 - v)/6*(Hh - 110);
+      const P = L.map((l, i) => [X(l, i), Y(l.v)]), d = pathOf(spline(P, 40, Hh - 30));   /* check-ins minutes apart are spread evenly so the shape still reads */
+      const pts = L.map((l,i) => tinyFace('done', l.v, i).replace('<svg ', `<svg x="${(P[i][0]-13).toFixed(1)}" y="${(P[i][1]-13).toFixed(1)}" width="26" height="26" class="wr-pt" style="--d:${(0.5 + 1.5*(P[i][0]-30)/(Wd-60)).toFixed(2)}s" `) + (l.mark ? `<path class="wr-mk" fill-rule="evenodd" transform="translate(${(P[i][0] - 7.2).toFixed(1)} ${(P[i][1] - 30).toFixed(1)}) scale(.6)" d="${MK[l.mark]}"/>` : '')).join('');
+      let br = ''; const i1 = mineL ? L.indexOf(mineL.worst) : -1, i2 = mineL && mineL.back ? L.indexOf(mineL.back) : -1;
+      if(i1 >= 0 && i2 > i1){ const x1 = P[i1][0], x2 = P[i2][0], top = Math.max(14, Math.min(P[i1][1], P[i2][1]) - 50);
+        br = `<path class="wr-br" pathLength="1" d="M${x1.toFixed(1)} ${(P[i1][1]-17).toFixed(1)}C${x1.toFixed(1)} ${top} ${x2.toFixed(1)} ${top} ${x2.toFixed(1)} ${(P[i2][1]-17).toFixed(1)}"/><text class="wr-brt" x="${((x1 + x2)/2).toFixed(1)}" y="${top + 2}" text-anchor="middle">${fmtDur(mineL.back.t - mineL.at.t)}</text>`; }
+      viz = `<div class="wr-curve"><svg viewBox="0 0 ${Wd} ${Hh}" role="img" aria-label="The day's feelings as a line, from ${tOf(L[0])} to ${tOf(L[L.length-1])}"><line class="wr-mid" x1="18" x2="${Wd-18}" y1="${Y(3)}" y2="${Y(3)}"/><path class="wr-line" pathLength="1" d="${d}"/>${br}${pts}<text x="${P[0][0].toFixed(1)}" y="${Hh-8}" text-anchor="middle">${tOf(L[0])}</text><text x="${P[P.length-1][0].toFixed(1)}" y="${Hh-8}" text-anchor="middle">${tOf(L[L.length-1])}</text></svg></div>`; }
+    cards.push({id:'day', lv:aR, g:mineL && mineL.back ? [LV[mineL.worst.v].c[0], LV[cl(mineL.back.v)].c[1]] : null, html:`<p class="wr-k">the shape of ${esc(dayWord)}</p><h3 class="wr-h">${dayShape(L)}</h3>${viz}<p class="wr-p">${pass}${wkLine}</p>${exNote(ex)}`}); }
+
+  /* 3. where the mind was. Format: a dial from past to future, with a needle */
+  let top = '';
+  { let src = L.filter(l => l.when), scope = isT ? 'today' : k === addDays(TODAY(), -1) ? 'yesterday' : 'that day'; if(src.length < 2){ src = W.filter(l => l.when); scope = 'this week'; }
+    const cx = 150, cy = 148, R = 108, pt = (deg, r) => [cx + r*Math.cos(deg*Math.PI/180), cy - r*Math.sin(deg*Math.PI/180)], ok = src.length >= 2;
+    const b = {past:src.filter(l => l.when === 'past'), now:src.filter(l => l.when === 'now'), future:src.filter(l => l.when === 'future')}, n = src.length;
+    if(ok){ top = ['future','past','now'].sort((x,y) => b[y].length - b[x].length)[0]; if(['past','now','future'].filter(x => b[x].length === b[top].length).length > 1) top = ''; }
+    const seg = (a0, a1, on) => { const p0 = pt(a0, R), p1 = pt(a1, R); return `<path class="wr-s3${on ? ' on' : ''}" d="M${p0[0].toFixed(1)} ${p0[1].toFixed(1)}A${R} ${R} 0 0 1 ${p1[0].toFixed(1)} ${p1[1].toFixed(1)}"/>`; };
+    const blobs = !ok ? '' : [['past',150],['now',90],['future',30]].map(([x, c]) => b[x].slice(-5).map((l, j, arr) => { const q = pt(c + ((arr.length - 1)/2 - j)*Math.min(12, 44/arr.length), R); return tinyFace('done', l.v, j).replace('<svg ', `<svg x="${(q[0]-12).toFixed(1)}" y="${(q[1]-12).toFixed(1)}" width="24" height="24" class="wr-pt" style="--d:${(0.5 + j*0.12).toFixed(2)}s" `); }).join('')).join('');
+    const lab = (x, y, t, on) => `<text class="${on ? 'on' : ''}" x="${x}" y="${y}" text-anchor="middle">${t}</text>`;
+    const dial = `<svg class="wr-dial${ok ? '' : ' off'}" viewBox="0 0 300 180" role="img" aria-label="${ok ? `${b.past.length} about the past, ${b.now.length} about right now, ${b.future.length} about the future` : 'Not enough answers yet'}">${seg(176, 124, top === 'past')}${seg(116, 64, top === 'now')}${seg(56, 4, top === 'future')}${lab(cx - R, cy + 24, 'past', top === 'past')}${lab(cx, cy - R - 16, 'right now', top === 'now')}${lab(cx + R, cy + 24, 'future', top === 'future')}${blobs}${ok ? `<g class="wr-needle" style="--a:${((b.future.length - b.past.length)/n*60).toFixed(1)}deg"><path d="M150 148V62"/><circle cx="150" cy="148" r="7"/></g>` : ''}</svg>${ok ? '' : LOCK}`;
+    const wAll = W.filter(l => l.when), wf = wAll.filter(l => l.when === 'future'), wn = wAll.filter(l => l.when === 'now');
+    const cmp = wf.length >= 2 && wn.length >= 2 && Math.abs(avgV(wf) - avgV(wn)) >= .8 ? ` So far, feelings about the future run ${avgV(wf) < avgV(wn) ? 'lower' : 'higher'} than feelings about right now.` : '';
+    cards.push({id:'mind', lv:ok ? aR : 3, html:`<p class="wr-k">where your mind was</p><div class="wr-dialbox">${dial}</div><h3 class="wr-h">${!ok ? 'Where does your mind live?' : !top ? 'Split between then, now and next.' : top === 'future' ? `Your mind spent ${esc(scope)} ahead of you.` : top === 'past' ? `Your mind spent ${esc(scope)} looking back.` : `You were mostly here ${esc(scope)}.`}</h3><p class="wr-p">${!ok ? 'Add a cause and answer “past or future?” on two check-ins, and the needle moves.' : `${b.past.length} about the past, ${b.now.length} about right now, ${b.future.length} about what hasn’t happened yet.${cmp}`}</p>${exNote(ok && src.some(l => l.ex))}`}); }
+
+  /* 4. patterns so far. Format: a grid of small tiles, each sealed until there is enough to say */
+  let lowB = null, dn = null;
+  { const th = THEMES.map(([name, re]) => ({name, ls:W.filter(l => l.note && re.test(l.note))})).filter(t => t.ls.length >= 2).map(t => ({name:t.name, n:t.ls.length, a:avgV(t.ls)})).sort((x,y) => y.a - x.a);
+    const pls = [...new Set(W.map(l => l.place).filter(id => placeOf(id)))].map(id => ({name:placeOf(id).name, ls:W.filter(l => l.place === id)})).filter(t => t.ls.length >= 2).map(t => ({name:t.name, a:avgV(t.ls)})).sort((x,y) => y.a - x.a);
+    const days = new Set(W.map(l => dk(l.t))).size, binsAll = [0,1,2,3].map(i => { const ls = W.filter(l => Math.min(3, Math.floor(dm(l.t)/360)) === i); return {i, n:ls.length, a:ls.length ? avgV(ls) : null}; }), bins = binsAll.filter(x => x.n >= 2);
+    const words = {}; W.forEach(l => { const w = l.word || l.core; if(w) words[w] = (words[w] || 0) + 1; }); const wl = Object.entries(words).sort((x,y) => y[1] - x[1]);
+    const sealedT = (label, need) => `<div class="wr-tile sealed"><em>${label}</em>${LOCK}<span>${need}</span></div>`;
+    const hasTh = th.length >= 2 && th[0].a - th[th.length-1].a >= .8, up = hasTh ? th[0] : null; if(hasTh) dn = th[th.length-1];
+    if(days >= 3 && bins.length >= 2){ const hb = bins.reduce((x,q) => q.a > x.a ? q : x), lb = bins.reduce((x,q) => q.a < x.a ? q : x); if(hb.a - lb.a >= .6) lowB = lb; }
+    const tiles = [
+      up ? `<div class="wr-tile"><em>lifts you</em>${miniFace('', cl(up.a), 1)}<b>${up.name}</b><span>${up.n} times · ${lvName(up.a)}</span></div>` : sealedT('lifts you', 'opens when causes repeat'),
+      dn ? `<div class="wr-tile"><em>drains you</em>${miniFace('', cl(dn.a), 4)}<b>${dn.name}</b><span>${dn.n} times · ${lvName(dn.a)}</span></div>` : sealedT('drains you', 'opens when causes repeat'),
+      lowB ? `<div class="wr-tile"><em>your rhythm</em><div class="wr-bars">${binsAll.map(x => `<i class="${x.i === lowB.i ? 'on' : x.a == null ? 'nil' : ''}" style="--h:${x.a == null ? .1 : (0.18 + x.a/6*0.82).toFixed(2)}"><u>${['mor','aft','eve','ngt'][x.i]}</u></i>`).join('')}</div><b>${BINS[lowB.i]} run lowest</b></div>` : sealedT('your rhythm', days < 3 ? `${days} of 3 days` : 'no part of the day stands out yet'),
+      wl.length >= 3 ? `<div class="wr-tile"><em>feelings named</em><strong>${wl.length}</strong><b>most used: ${esc(wl[0][0].toLowerCase())}</b></div>` : sealedT('feelings named', `${wl.length} of 3 exact feelings`),
+    ];
+    const place = pls.length >= 2 && pls[0].a - pls[pls.length-1].a >= .8 ? `<div class="wr-tile wide"><em>places</em><b>best: ${esc(pls[0].name)} · hardest: ${esc(pls[pls.length-1].name)}</b></div>` : '';
+    const open = [up, dn, lowB, wl.length >= 3].filter(Boolean).length;
+    cards.push({id:'patterns', lv:up ? cl(up.a) : aR, g:up && dn ? [LV[cl(dn.a)].c[0], LV[cl(up.a)].c[1]] : null, html:`<p class="wr-k">patterns · so far</p><h3 class="wr-h small">${open ? 'What the week is teaching you' : 'Four things worth waiting for'}</h3><div class="wr-grid">${tiles.join('')}${place}</div>${exNote(wex && open > 0)}`}); }
+
+  /* 5. one thing to carry. Format: a note that can greet you tomorrow */
+  const qv = lowB ? `watch what happens in the ${BINS[lowB.i].slice(0, -1)}` : top === 'future' ? 'catch one thought about the future as it arrives' : dn ? `notice the first moment ${dn.name.toLowerCase()} shows up` : 'try to name one feeling a little more exactly';
+  const q = `${isT ? 'Tomorrow' : 'Next time'}, ${qv}.`;
+  cards.push({id:'carry', lv:aR, html:`<p class="wr-k">one thing to carry</p><div class="wr-note"><h3 class="wr-h">${q}</h3></div><p class="wr-p">Noticing is the practice. See you at the next emotion.</p>${isT ? `<label class="wr-greet"><input type="checkbox" id="wrGreet"${store.carryOff ? '' : ' checked'}><span>greet me with this tomorrow</span></label>` : ''}<button type="button" class="wr-done" data-a="close">Done</button>`});
+  return {k, i:Math.min(keepI || 0, cards.length - 1), cards, q, isT, step};
+}
+function drawWrap(){
+  const c = WR.cards[WR.i], g = c.g || LV[c.lv].c, box = $('shBox');
+  box.style.setProperty('--g1', g[0]); box.style.setProperty('--g2', g[1]);
+  $('wr').innerHTML = `<div class="wr-top"><div class="wr-seg" role="img" aria-label="Card ${WR.i + 1} of ${WR.cards.length}">${WR.cards.map((_,i) => `<i class="${i <= WR.i ? 'on' : ''}"></i>`).join('')}</div><button type="button" class="x" data-a="close" aria-label="Close"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div><div class="wr-card${WR.flip ? ' flip' : ''}" data-id="${c.id}">${c.html}</div><p class="wr-tap">${c.guess || c.id === 'carry' ? '' : 'tap to continue'}</p>`;
+  WR.flip = false;
+}
+function wrapGo(d){ if(!WR) return; const n = WR.i + d; if(n < 0 || n >= WR.cards.length || (d > 0 && WR.cards[WR.i].guess)) return; WR.i = n;
+  if(WR.cards[n].id === 'carry'){ store.seen = store.seen || {}; store.seen[WR.k] = 1; if(WR.isT && !store.carryOff) store.carry = {from:WR.k, text:WR.q}; save(); } drawWrap(); }
+function openWrap(k){ const w = buildWrap(k); if(!w){ toast('nothing logged that day yet'); return; } WR = w; openSheet('wrap', null); drawWrap(); }
+function drawPlaces(){
+  const T = SH.T;
+  const g = geoOf(T);
+  $('shPlaces').innerHTML = `<p class="geoline"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="${PIN}"/></svg>${g ? `<span>${fmtGeo(g)}</span><a href="${osmLink(g)}" target="_blank" rel="noopener">open map ↗</a>` : '<span>no exact spot yet</span>'}</p><div class="opts">${store.places.map(p => `<button type="button" data-place="${p.id}" aria-pressed="${p.id === T.place}">${esc(p.name)}</button>`).join('')}${SUGGEST.filter(n => !store.places.some(p => p.name.toLowerCase() === n.toLowerCase())).slice(0, 6).map(n => `<button type="button" class="sug" data-suggest="${esc(n)}">+ ${esc(n)}</button>`).join('')}${T.place ? '<button type="button" data-place="">No place</button>' : ''}</div>
+    <form class="newplace" id="shNewPlace" style="margin-top:12px"><input id="shPlaceName" maxlength="24" placeholder="Or name your own, e.g. Mum’s kitchen" aria-label="New place name"><button type="submit">Add</button></form>
+    <form class="newplace" id="shGeo" style="margin-top:8px"><input id="shGeoIn" maxlength="300" placeholder="Exact spot: 47.4979, 19.0402 or a maps link" aria-label="Coordinates of this spot"><button type="submit">Set</button></form>`;
+}
+function drawSpots(demo){
+  const el = $('shSpots'); if(!el) return;
+  const list = demo ? DEMO_PLACES : store.places;
+  el.innerHTML = list.map(p => { const g = p.lat != null ? {lat:p.lat, lng:p.lng} : null, edit = !demo && ui.spotEdit === p.id;
+    return `<div class="spot"><b>${esc(p.name)}${demo || p.ex ? ' <i>example</i>' : ''}</b><span class="co">${g ? fmtGeo(g) : 'no exact spot yet'}</span>${g ? `<a href="${osmLink(g)}" target="_blank" rel="noopener">open map ↗</a>` : demo ? '' : `<button type="button" data-spot="${p.id}">set spot</button>`}${g && !demo && !edit ? `<button type="button" class="lnk" data-spot="${p.id}">change</button>` : ''}${edit ? `<form class="spotform" id="spotForm" data-pid="${p.id}"><input maxlength="300" placeholder="47.4979, 19.0402 or a maps link" aria-label="Coordinates for ${esc(p.name)}"><button type="submit">Save</button></form>` : ''}</div>`; }).join('') || '<p class="map-note">No places yet.</p>';
+  const inp = el.querySelector('.spotform input'); if(inp) inp.focus();
+}
+function setPlace(id){ mine(); SH.T.place = id; const pp = realPlace(id); if(pp && SH.T.geo && pp.lat == null){ pp.lat = SH.T.geo.lat; pp.lng = SH.T.geo.lng; save(); } if(SH.kind === 'place'){ closeSheet(); } else drawPlaces(); }
+/* places: each place is a pin with its feelings around it, coloured by mood */
+function drawMap(){
+  const el = $('shMap'), W = el.clientWidth || 346, H = 336;
+  document.querySelectorAll('#mapSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.ms === ui.mapScope));
+  let logs = ui.mapScope === 'day' ? logsFor(ui.day) : store.logs.slice().sort((a,b) => a.t - b.t);
+  const demo = !logs.some(l => realPlace(l.place)); if(demo) logs = DEMO_LOGS;
+  const groups = new Map();
+  logs.forEach(l => { const k = placeOf(l.place) ? l.place : ''; if(!groups.has(k)) groups.set(k, []); groups.get(k).push(l); });
+  const ids = [...groups.keys()], n = ids.length;
+  const withG = ids.filter(id => { const p = placeOf(id); return p && p.lat != null; }), noG = ids.filter(id => !withG.includes(id)), geo = withG.length > 1, Hg = noG.length ? H - 92 : H;
+  const P = {};
+  if(geo){ const ps = withG.map(placeOf), la = ps.map(p => p.lat), lo = ps.map(p => p.lng), k = Math.cos(la[0]*Math.PI/180);
+    const minX = Math.min(...lo)*k, maxX = Math.max(...lo)*k, minY = Math.min(...la), maxY = Math.max(...la), sp = Math.max(maxX-minX, maxY-minY, 1e-6);
+    ps.forEach(p => { P[p.id] = [70 + (p.lng*k-minX)/sp*(W-140) + (sp - (maxX-minX))/sp*(W-140)/2, Hg-78 - (p.lat-minY)/sp*(Hg-150) - (sp - (maxY-minY))/sp*(Hg-150)/2]; });
+    /* pins that would sit on top of each other are eased apart, keeping their directions */
+    for(let it = 0; it < 80; it++){ for(let a = 0; a < withG.length; a++) for(let b = a + 1; b < withG.length; b++){ const A = P[withG[a]], B = P[withG[b]]; let dx = B[0]-A[0], dy = B[1]-A[1], d = Math.hypot(dx, dy) || .01;
+        if(d < 96){ const m = (96 - d)/2/d; A[0] -= dx*m; A[1] -= dy*m; B[0] += dx*m; B[1] += dy*m; } }
+      withG.forEach(id => { const q = P[id]; q[0] = Math.max(52, Math.min(W-52, q[0])); q[1] = Math.max(52, Math.min(Hg-92, q[1])); }); }
+    noG.forEach((id,i) => { P[id] = [W*(i+1)/(noG.length+1), H-74]; });
+  } else ids.forEach((id,i) => { if(n === 1) P[id] = [W/2, H/2-8]; else if(n === 2) P[id] = [W*(i ? .72 : .28), H/2-8];
+      else { const a = -Math.PI/2 + i/n*2*Math.PI; P[id] = [W/2 + Math.cos(a)*(W/2-78), H/2-10 + Math.sin(a)*(H/2-74)]; } });
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${demo ? 'Example of the places map' : 'Places where feelings were captured'}" ${demo ? 'class="demo"' : ''}>`;
+  if((ui.mapScope === 'day' || demo) && n > 1){ let d = '', last = null; logs.forEach(l => { const k = placeOf(l.place) ? l.place : ''; if(k !== last){ d += (d ? 'L' : 'M') + P[k][0].toFixed(1) + ' ' + P[k][1].toFixed(1); last = k; } }); s += `<path class="trail" d="${d}"/>`; }
+  let dots = '';
+  ids.forEach(id => { const [x,y] = P[id], ls = groups.get(id), p = placeOf(id);
+    ls.forEach((l,i) => { let ring = 0, idx = i, cap = 8; while(idx >= cap){ idx -= cap; ring++; cap = 8 + ring*6; }
+      const r = 30 + ring*17, a = -Math.PI/2 + (idx + (ring%2)*.5)/cap*2*Math.PI, dx = x + r*Math.cos(a), dy = y + r*Math.sin(a);
+      s += `<line class="link" x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${dx.toFixed(1)}" y2="${dy.toFixed(1)}"/>`;
+      dots += `<g class="pt" data-id="${l.id}" tabindex="0" role="button" aria-label="${esc(labelOf(l))} at ${hhmm(minsOf(l.t))}"><circle class="dot mdot" cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="${l.mark ? 11 : 8}" fill="${LV[l.v].color}"/>${l.mark ? `<path class="mki" fill-rule="evenodd" transform="translate(${(dx - 6.6).toFixed(1)} ${(dy - 6.8).toFixed(1)}) scale(.55)" d="${MK[l.mark]}"/>` : ''}</g>`; });
+    const rings = ls.length > 8 ? (ls.length > 22 ? 3 : 2) : 1, avg = ls.reduce((a,l) => a+l.v, 0)/ls.length;
+    dots += `<circle class="hub" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="15"/><path class="pin" transform="translate(${(x-8).toFixed(1)} ${(y-8).toFixed(1)})" d="${PIN}"/>
+      <text class="pn" x="${x.toFixed(1)}" y="${(y + 30 + rings*17 + 6).toFixed(1)}" text-anchor="middle">${esc(p ? p.name : 'No place')}</text>
+      <text class="pc" x="${x.toFixed(1)}" y="${(y + 30 + rings*17 + 21).toFixed(1)}" text-anchor="middle">${ls.length} · mostly ${esc(LV[Math.round(avg)].name.toLowerCase())}</text>`; });
+  el.innerHTML = s + dots + '</svg>' + `<p class="map-note">${demo ? '<b>Example.</b> Add a place when you capture a feeling and your own map appears here.' : (geo ? 'Pins are arranged by their coordinates, eased apart where they are close.' + (noG.length ? ' Anything without coordinates is along the bottom.' : '') : 'A sketch, not to scale: add coordinates below to place the pins.') + ' Each dot is a feeling, coloured by mood.'}${logs.some(l => l.mark) ? ' A crown is a day’s highlight, a skull its low point.' : ''}</p>`;
+  drawSpots(demo);
+}
+
+const sheet = $('sheet');
+sheet.addEventListener('click', e => {
+  if(!SH) return;
+  if(SH.kind === 'wrap' && WR){
+    const mp = e.target.closest('[data-markpick]'); if(mp && !mp.disabled){ const l = logById(mp.dataset.markpick); if(l && WR.step) setMark(l, WR.step); WR = buildWrap(WR.k, WR.i); drawWrap(); renderChart(); return; }
+    const ms = e.target.closest('[data-markskip]'); if(ms){ wrSkip[WR.k + ms.dataset.markskip] = 1; WR = buildWrap(WR.k, WR.i); drawWrap(); return; }
+    const gb = e.target.closest('[data-guess]'); if(gb){ store.guess = store.guess || {}; store.guess[WR.k] = +gb.dataset.guess; save(); WR = buildWrap(WR.k, WR.i); WR.flip = true; drawWrap(); return; }
+    if(!e.target.closest('button, a, label, input')){ const r = $('shBox').getBoundingClientRect(); wrapGo(e.clientX < r.left + r.width*.28 ? -1 : 1); return; } }
+  const fc = e.target.closest('.fc'); if(fc){ pickFace(fc); return; }
+  const me = e.target.closest('.msg.me'); if(me){ const n = chatNotes(SH.T); mine(); if(me.dataset.i === 'when') SH.T.when = ''; else { n.splice(+me.dataset.i, 1); SH.T.note = n.join('\n'); if(!n.length) SH.T.when = ''; } if(SH.isLog) save(); clearTimeout(chatTimer); drawChat(true); return; }
+  const q = e.target.closest('[data-q]'); if(q){ userSay(q.dataset.q); return; }
+  const wn = e.target.closest('[data-when]'); if(wn){ sayWhen(wn.dataset.when); return; }
+  const sg = e.target.closest('[data-suggest]'); if(sg){ const p = {id:'p' + Date.now().toString(36), name:sg.dataset.suggest}; store.places.push(p); save(); setPlace(p.id); return; }
+  const pb = e.target.closest('[data-place]'); if(pb){ setPlace(pb.dataset.place); return; }
+  const spb = e.target.closest('[data-spot]'); if(spb){ ui.spotEdit = ui.spotEdit === spb.dataset.spot ? null : spb.dataset.spot; drawSpots(false); return; }
+  const ms = e.target.closest('[data-ms]'); if(ms){ ui.mapScope = ms.dataset.ms; drawMap(); return; }
+  const pt = e.target.closest('.pt'); if(pt){ const l = logById(pt.dataset.id); if(l) openSheet('entry', l); return; }
+  const b = e.target.closest('[data-a]'); if(!b) return; const a = b.dataset.a;
+  if(a === 'close') closeSheet();
+  else if(a === 'accept') accept(200);
+  else if(a === 'mark'){ mine(); setMark(SH.T, b.dataset.m); openSheet('entry', SH.T); }
+  else if(a === 'towheel') openSheet('wheel', SH.T, 'entry');
+  else if(a === 'tochat') openSheet('chat', SH.T, 'entry');
+  else if(a === 'clearword'){ mine(); SH.T.core = ''; SH.T.word = ''; drawWheel(); }
+  else if(a === 'del'){
+    if(!b.dataset.armed){ b.dataset.armed = '1'; b.textContent = 'Tap again'; setTimeout(() => { if(b.isConnected){ delete b.dataset.armed; b.textContent = 'Delete'; } }, 3000); return; }
+    store.logs = store.logs.filter(l => l.id !== SH.T.id); save(); SH = null; sheet.hidden = true; sheet.innerHTML = ''; paintDraft(); renderChart(); toast('deleted');
+  }
+});
+sheet.addEventListener('change', e => { if(e.target.id === 'wrGreet' && WR){ store.carryOff = !e.target.checked; if(e.target.checked) store.carry = {from:WR.k, text:WR.q}; else delete store.carry; save(); } });
+sheet.addEventListener('input', e => {
+  if(!SH) return;
+  if(e.target.id === 'shTime' && e.target.value){ const [h,m] = e.target.value.split(':').map(Number), cm = h*60+m, t = at(dk(SH.T.t), cm < DS ? cm + 1440 : cm); if(t <= Date.now() + 60000){ mine(); SH.T.t = t; } else toast('that time is still in the future'); }
+});
+sheet.addEventListener('submit', e => {
+  e.preventDefault();
+  if(e.target.id === 'shChat'){ userSay($('shSay').value); return; }
+  if(e.target.id === 'shGeo' || e.target.id === 'spotForm'){
+    const inp = e.target.querySelector('input'), g = parseGeo(inp.value);
+    if(!g){ toast('could not read that · try 47.4979, 19.0402'); return; }
+    if(e.target.id === 'spotForm'){ const pp = realPlace(e.target.dataset.pid); if(pp){ pp.lat = g.lat; pp.lng = g.lng; delete pp.ex; } ui.spotEdit = null; save(); drawMap(); }
+    else { mine(); SH.T.geo = g; const pp = realPlace(SH.T.place); if(pp && pp.lat == null){ pp.lat = g.lat; pp.lng = g.lng; } save(); drawPlaces(); }
+    toast('exact spot saved'); return; }
+  if(e.target.id !== 'shNewPlace') return;
+  const name = $('shPlaceName').value.trim(); if(!name) return;
+  let p = store.places.find(x => x.name.toLowerCase() === name.toLowerCase());
+  if(!p){ p = {id:'p' + Date.now().toString(36), name}; store.places.push(p); save(); }
+  setPlace(p.id);
+});
+sheet.addEventListener('keydown', e => { if(!SH) return; if(e.key === 'Escape') closeSheet(); else if(SH.kind === 'wrap' && (e.key === 'ArrowRight' || e.key === ' ')){ e.preventDefault(); wrapGo(1); } else if(SH.kind === 'wrap' && e.key === 'ArrowLeft') wrapGo(-1); });
+
+/* ---------- wiring ---------- */
+$('palBtn').addEventListener('click', () => { const R = noticedRec(); if(R) openSheet('wheel', R, null, true); });
+$('noteBtn').addEventListener('click', () => { const R = noticedRec(); if(R) openSheet('chat', R, null, true); });
+$('okBtn').addEventListener('click', ending);
+$('noted').addEventListener('click', e => { const go = e.target.closest('#ndWrap'); endDone(); if(go) setTimeout(() => openWrap(TODAY()), reduced() ? 30 : 580); });
+$('wrapBtn').addEventListener('click', () => openWrap(ui.day));
+for(const [id, m] of [['crownBtn','crown'],['skullBtn','skull']]){ const b = $(id);
+  b.addEventListener('pointerdown', e => e.stopPropagation());
+  b.addEventListener('click', () => { const R = noticedRec(); if(!R) return; setMark(R, m); paintDraft(); renderChart(); if(R.mark === m && !reduced()){ b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); } }); }
+$('wkWraps').addEventListener('click', e => { const b = e.target.closest('[data-wrapday]'); if(b && !b.disabled) openWrap(b.dataset.wrapday); });
+$('helpBtn').addEventListener('click', () => { const R = noticedRec(); if(R) openSheet('calm', R); });
+$('notif').addEventListener('click', () => { const R = logById($('notif').dataset.id); notifOn(false); if(R) openSheet('place', R); });
+$('pinBtn').addEventListener('click', () => openSheet('map', null));
+$('scopeTg').addEventListener('click', e => { const b = e.target.closest('button'); if(b){ ui.scope = b.dataset.scope; renderChart(); } });
+$('prev').addEventListener('click', () => go(-1));
+$('next').addEventListener('click', () => go(1));
+$('dayLabel').addEventListener('click', () => { ui.day = TODAY(); ui.scope = 'day'; renderChart(); });
+$('exNote').addEventListener('click', () => { store.logs = store.logs.filter(l => !l.ex); const used = new Set(store.logs.map(l => l.place)); store.places = store.places.filter(p => !p.ex || used.has(p.id)); if(!realPlace(D.place)) D.place = ''; save(); paintDraft(); renderChart(); toast('examples cleared · the thread is yours'); });
+let rs; window.addEventListener('resize', () => { clearTimeout(rs); rs = setTimeout(renderChart, 120); });
+setInterval(() => { if($('sheet').hidden) renderChart(); }, 60000);
+
+paintDraft(); renderChart(); drawFace(0);
+{ const sp = $('splash'), bye = () => { sp.classList.add('bye'); setTimeout(() => sp.remove(), 540); }, cy = store.carry && store.carry.from === addDays(TODAY(), -1) ? store.carry.text.replace(/^Tomorrow, /, 'Today, ') : '';
+  if(cy){ const n = document.createElement('small'); n.textContent = cy; sp.querySelector('p').appendChild(n); }
+  sp.addEventListener('click', bye); setTimeout(bye, cy ? 4200 : reduced() ? 1400 : 2000); }
+if(store.dash) setDash(true, true);
+if(!reduced()) requestAnimationFrame(faceLoop);
+})();
+</script>
+<script>
+/* offline support: once loaded, the app works without a connection and can be added to the home screen */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+</script>
+</body>
+</html>
