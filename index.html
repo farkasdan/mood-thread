@@ -144,7 +144,18 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
 .vs-line i{display:block;width:7px;height:1px;background:rgb(var(--fg))}
 .vs-line b{position:absolute;left:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:rgb(var(--fg));box-shadow:0 0 0 3px rgba(var(--fg),.25)}
 /* the sideways scale: fine-tuning within the mood */
-.hscale{position:absolute;left:0;right:30px;bottom:34px;display:flex;align-items:center;justify-content:center;gap:12px;opacity:.62;pointer-events:none;transition:opacity .3s}
+.hscale{position:absolute;left:0;right:30px;bottom:34px;display:flex;align-items:center;justify-content:center;gap:12px;opacity:0;pointer-events:none;transition:opacity .3s}
+.app.fine .hscale{opacity:.7}
+.app.fine .vscale{opacity:0}
+.wscale{position:absolute;right:0;top:11%;bottom:17%;width:24px;display:flex;flex-direction:column;align-items:center;opacity:0;pointer-events:none;transition:opacity .3s}
+.wscale .vs-line i.mid{width:13px}
+.wlab{position:absolute;right:28px;font-weight:300;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .3s}
+#wU{top:calc(11% - 6px)}
+#wD{bottom:calc(17% - 6px)}
+.app.fine.cored .wscale,.app.fine.cored .wlab{opacity:.7}
+.backb{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:none;border:1px solid rgba(var(--fg),.45);background:rgba(var(--fg),.12);color:rgb(var(--fg));font:inherit;font-weight:400;font-size:11.5px;letter-spacing:.08em;padding:7px 14px;border-radius:99px;cursor:pointer;white-space:nowrap;z-index:2}
+.app.fine .backb{display:block}
+.app.dashOpen .backb,.app.dashOpen .wscale,.app.dashOpen .wlab{display:none}
 .hscale span{flex:1;min-width:0;font-weight:300;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hscale span:first-child{text-align:right}
 .hs-line{position:relative;flex:none;width:calc(var(--n, 3) * 24px);height:1px;background:rgba(var(--fg),.7);display:flex;justify-content:space-between;align-items:center}
@@ -783,8 +794,11 @@ input,textarea{-webkit-user-select:text;user-select:text}
       </div>
     </div>
     <div class="vscale" aria-hidden="true"><div class="vs-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><b id="mark"></b></div></div>
+    <button type="button" class="backb" id="backBtn">‹ change mood</button>
+    <div class="wscale" id="wscale" aria-hidden="true"><div class="vs-line"><i></i><i></i><i class="mid"></i><i></i><i></i><b id="wMark"></b></div></div>
+    <span class="wlab" id="wU" aria-hidden="true"></span><span class="wlab" id="wD" aria-hidden="true"></span>
     <div class="hscale" id="hscale" aria-hidden="true"><span id="hL"></span><div class="hs-line" id="hsLine"></div><span id="hR"></span></div>
-    <p class="hint" id="hint">swipe up or down, sideways to fine-tune</p>
+    <p class="hint" id="hint">swipe up or down, then let go</p>
   </main>
 
   <footer class="actions" id="actions">
@@ -985,7 +999,14 @@ function tint(rgb, e, top){
 }
 const tint2 = (g, e) => [tint(g[0], e), tint(g[1], e, true)];
 const toRGB = c => c[0] === '#' ? [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)) : c.match(/\d+/g).map(Number);
-const logColors = l => tint2(LV[l.v].c, hOf(l.v, l.core)/2);
+/* the second axis of fine-tuning: the exact word. Two sit above the core feeling, two below. */
+const WI = {'1':0, '2':1, '-1':2, '-2':3}, WV = [1, 2, -1, -2];
+const wordsOf = (lv, core) => (WHEEL[lv].find(c => c[0] === core) || [0, []])[1];
+const wordAt = (lv, h, w) => { const c = coreAt(lv, h), i = WI[Math.round(w)]; return c && i != null ? wordsOf(lv, c)[i] || '' : ''; };
+const wOf = (lv, core, word) => WV[wordsOf(lv, core).indexOf(word)] || 0;
+const shade = (rgb, e) => { if(!e) return rgb; const A = toRGB(rgb), B = e > 0 ? [255, 255, 255] : [14, 10, 44], k = Math.min(1, Math.abs(e))*(e > 0 ? .2 : .3); return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x)*k)).join(',')})`; };
+const fineColors = (g, h, w) => tint2(g, h/2).map(c => shade(c, h ? w/2 : 0));
+const logColors = l => fineColors(LV[l.v].c, hOf(l.v, l.core), wOf(l.v, l.core, l.word));
 function colorsAt(v){ const p = Math.max(0, Math.min(600, v))/100, i = Math.min(5, Math.floor(p)), t = p - i; return [mix(LV[i].c[0], LV[i+1].c[0], t), mix(LV[i].c[1], LV[i+1].c[1], t)]; }
 const PIN = 'M8 1.5a4.6 4.6 0 0 0-4.6 4.6C3.4 9.6 8 14.5 8 14.5s4.6-4.9 4.6-8.4A4.6 4.6 0 0 0 8 1.5zm0 6.3a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z';
 
@@ -1061,7 +1082,7 @@ store.logs.forEach(l => { if(l.mark && !canMark(l, l.mark)) delete l.mark; });
 store.places.forEach(p => { if(p.ex && p.lat == null && EX_GEO[p.id]){ p.lat = EX_GEO[p.id][0]; p.lng = EX_GEO[p.id][1]; } });
 
 /* the feeling being captured right now */
-const D = {v:300, h:0, touched:false, core:'', word:'', note:'', place:'', geo:null, geoTried:false};
+const D = {v:300, h:0, w:0, touched:false, core:'', word:'', note:'', place:'', geo:null, geoTried:false};
 (function(){ const last = store.logs.filter(l => !l.ex).sort((a,b) => b.t - a.t)[0]; if(last && realPlace(last.place)) D.place = last.place; })();
 const ui = {day:TODAY(), scope:'day', drag:false, mapScope:'day', noticed:null, adjust:null, spotEdit:null};
 const app = $('app');
@@ -1097,13 +1118,32 @@ const CORE_FX = {
   Loved:{hearts:1, blush:1, spark:-1}, Proud:{raise:1, chin:1, spark:.3}, Happy:{}, Excited:{bounce:1, open:.8, bolt:1},
   Adored:{hearts:.4, blush:1}, Joyful:{bounce:.6}, Powerful:{angry:.7, bolt:1, hearts:-1},
 };
+/* a few words move in their own way */
+const WORD_FX = {Playful:{bounce:.7}, Energized:{bounce:1}, Eager:{bounce:.6}, Ecstatic:{bounce:1}, Elated:{bounce:.5}, Unstoppable:{bounce:.5}, Delighted:{bounce:.4}, Panicked:{shake:1}, Enraged:{shake:.8}, Nervous:{shake:.6}, Stressed:{shake:.4}, Overwhelmed:{shake:.5}, Tense:{shake:.25, still:.7}, Restless:{shake:.45}, Impatient:{shake:.3},
+  Calm:{still:.7}, Relaxed:{still:.5}, Flat:{still:1}, Blank:{still:1}, Detached:{still:.8}, Focused:{still:.9}, Safe:{still:.6}, Empty:{still:.9}, Confident:{chin:1}, Triumphant:{chin:1, bounce:.5}, Fearless:{chin:.8}, Respected:{chin:.6}, Small:{shrink:1}, Worthless:{shrink:.7}, Humiliated:{shrink:.5}, Exposed:{shrink:.3}};
+const NAME_LV = {}; WHEEL.forEach((cs, lv) => cs.forEach(c => { NAME_LV[c[0]] = lv; c[1].forEach(w => NAME_LV[w] = lv); }));
+const NOFX = {}, FXC = {};
+/* reads the feeling's drawn expression ("eyes brows mouth extras") and turns it into movements of the big face */
+function fxOf(name){
+  if(!name || !FACE[name]) return NOFX; if(FXC[name]) return FXC[name];
+  const [eyes, brows, mouth, extra] = FACE[name].split(' '), x = extra.split('+'), has = k => +x.includes(k), lv = NAME_LV[name];
+  const f = {tears: has('tears') ? 1 : has('tear') ? .55 : -1, sweat: has('sweat') || -1, sigh:-1, note:-1, spark: has('spark') || -1, hearts: has('heart') || eyes === 'heart' ? 1 : -1, glance:-1, joy:-1,
+    steam:has('steam'), cloud:has('cloud'), zzz:has('zzz'), dots:has('dots'), q:has('q'), bolt:has('bolt'), blush:has('blush')};
+  Object.assign(f, {big:{wide:.7}, ring:{wide:1.1}, line:{squint:1}, x:{squint:1, shake:.4}, side:{look:1}, low: lv >= 4 ? {lid:1} : {droop:.75, look:-.4}, half:{droop:1}, arc:{joy:1}, star:{joy:1, wide:.3}, heart:{joy:1}, wink:{one:1}}[eyes],
+    {angry:{angry:1.3}, worried:{worry:.7}, raised:{raise:1}, one:{one:1}}[brows],
+    {teeth:{grit:1}, wail:{open:1, curve:-3}, O:{open:1, narrow:1}, o:{open:.6, narrow:1}, wavy:{wavy:1}, flat:{flat:1}, frown:{curve:-4}, smallfrown:{curve:-1.5}, small:{flat:.45}, bigsmile:{curve:3}, grin:{curve:4, open:.75}, smirk:{smirk:1}}[mouth],
+    CORE_FX[name], WORD_FX[name]);
+  return FXC[name] = f;
+}
 function drawFace(ts){
   const svg = $('face'); if(reduced()) ts = 700;
   const t = (D.v - 300)/300, neg = Math.max(0, -t), posi = Math.max(0, t), ph = ts/1700, L = D.v/100;
   const w = i => Math.max(0, 1 - Math.abs(L - i));     /* how much of each state's own little animation is showing */
   /* the fine-tuned feeling: blended between the two nearest stops on the sideways axis, and faded out while the mood itself is changing */
-  const lvN = Math.round(L), hA = Math.floor(D.h), hf = D.h - hA, fxA = CORE_FX[HPOS[lvN][hA]] || {}, fxB = CORE_FX[HPOS[lvN][hA + 1]] || {}, lw = Math.max(0, 1 - Math.abs(L - lvN)*2.5);
-  const F = k => lw*((1 - hf)*(fxA[k] || 0) + hf*(fxB[k] || 0)), cl = x => Math.max(0, Math.min(1, x));
+  const lvN = Math.round(L), lw = Math.max(0, 1 - Math.abs(L - lvN)*2.5), hA = Math.floor(D.h), hf = D.h - hA, wA = Math.floor(D.w), wf = D.w - wA;
+  const fx = (h, w) => { const c = HPOS[lvN][h]; return c ? fxOf(wordAt(lvN, h, w) || c) : NOFX; };
+  const q4 = [[fx(hA, wA), (1 - hf)*(1 - wf)], [fx(hA + 1, wA), hf*(1 - wf)], [fx(hA, wA + 1), (1 - hf)*wf], [fx(hA + 1, wA + 1), hf*wf]];
+  const F = k => { let v = 0; for(const [f, a] of q4) v += a*(f[k] || 0); return lw*v; }, cl = x => Math.max(0, Math.min(1, x));
   const set = (id, a, v) => $(id).setAttribute(a, v), op = (id, v) => { $(id).style.opacity = Math.max(0, Math.min(1, v)).toFixed(3); };
   const shape = (R, off) => { const N = 96, sx = 1 + 0.07*neg - 0.02*posi; let d = '';
     for(let i=0;i<=N;i++){ const th = i/N*2*Math.PI, sn = Math.sin(th);
@@ -1113,7 +1153,8 @@ function drawFace(ts){
     return d + 'Z'; };
   set('fBody', 'd', shape(84, 0)); set('fBody2', 'd', shape(68, 1.7));
   /* eyes: heavy lids when low, a glance from side to side when okay, happy arcs from good upwards */
-  const joy = sm((t - 0.25)/0.6), ey = -8 + 5*neg - 2*posi, blink = (ts % 4200) > 4080 ? 0.15 : 1;
+  const joy0 = sm((t - 0.25)/0.6), ey = -8 + 5*neg - 2*posi, blink = (ts % 4200) > 4080 ? 0.15 : 1;
+  const joy = cl(joy0 + F('joy'));
   const droop = 1 - Math.min(.8, w(2)*0.42*(0.5 + 0.5*Math.sin(ts/1500)) + 0.5*Math.max(0, F('droop'))*(0.8 + 0.2*Math.sin(ts/1500)));
   const look = cl(w(3) + F('glance'))*3.4*Math.max(-1, Math.min(1, Math.sin(ts/1150)*2.4)) + F('look')*4.5*(0.8 + 0.2*Math.sin(ts/900));
   const lid = cl(F('lid')), eyeK = (1 + 0.34*F('wide'))*(1 - 0.42*cl(F('squint')));
@@ -1128,11 +1169,13 @@ function drawFace(ts){
   const ny = 6.5 + 4*neg; set('fNose', 'd', `M${(-3.5 + look*.4).toFixed(1)} ${ny.toFixed(1)}q3.5 3.6 7 0`);
   /* mouth: the lip quivers when it is awful; dimples from good upwards */
   const q = (w(0)*1.1 + w(1)*0.45)*Math.sin(ts/50);
-  const mw = 11 + 9*posi + 3*neg, c = 3.4 + (t >= 0 ? t*13.6 : t*14.4), open = Math.max(sm((t - 0.6)/0.4), cl(F('open'))), my = 26 + 6*neg - 2*posi;
+  const mw0 = 11 + 9*posi + 3*neg, c0 = 3.4 + (t >= 0 ? t*13.6 : t*14.4), open = Math.max(sm((t - 0.6)/0.4), cl(F('open'))), my = 26 + 6*neg - 2*posi;
   /* some feelings swap the mouth: a wavering line, or gritted teeth */
   const wav = cl(F('wavy')), grit = cl(F('grit')), wa = 4.5 + 1.6*Math.sin(ts/190);
+  const nar = cl(F('narrow')), c1 = Math.max(-15, Math.min(19, c0 + F('curve')))*(1 - .85*cl(F('flat'))), c = c1 + ((c1 >= 0 ? 7 : -7) - c1)*nar, mw = mw0*(1 - .45*nar);
+  set('fMouth', 'transform', `rotate(${(-10*F('smirk')).toFixed(1)} 0 ${my.toFixed(1)})`);
   set('fMouthW', 'd', `M-14 ${(my + 2).toFixed(1)}q4.7 ${(-wa).toFixed(1)} 9.3 0t9.3 0t9.3 0`); op('fMouthW', wav*(1 - grit)); set('fTeeth', 'transform', `translate(0 ${(my + 1).toFixed(1)})`); op('fTeeth', grit); op('fMouth', (1 - wav)*(1 - grit));
-  set('fMouth', 'd', `M${(-mw+q).toFixed(1)} ${my.toFixed(1)}Q${q.toFixed(1)} ${(my + c*(1 + 1.1*open)).toFixed(1)} ${(mw+q).toFixed(1)} ${my.toFixed(1)}Q${q.toFixed(1)} ${(my + c*(1 - 0.5*open)).toFixed(1)} ${(-mw+q).toFixed(1)} ${my.toFixed(1)}Z`);
+  set('fMouth', 'd', `M${(-mw+q).toFixed(1)} ${my.toFixed(1)}Q${q.toFixed(1)} ${(my + c*(1 + 1.1*open)).toFixed(1)} ${(mw+q).toFixed(1)} ${my.toFixed(1)}Q${q.toFixed(1)} ${(my + c*(1 - 0.5*open) - 1.9*c*nar).toFixed(1)} ${(-mw+q).toFixed(1)} ${my.toFixed(1)}Z`);
   set('fDim', 'd', `M${(-mw-5).toFixed(1)} ${(my-4.5).toFixed(1)}q-2.6 3.6 0 7.2M${(mw+5).toFixed(1)} ${(my-4.5).toFixed(1)}q2.6 3.6 0 7.2`); op('fDim', sm((t - 0.15)/0.4)*0.7*(1 - wav)*(1 - grit));
   { const ch = 0.08 + 0.26*posi + w(4)*0.07*Math.sin(ts/500) + cl(F('blush'))*(0.3 + 0.06*Math.sin(ts/600)); op('fCL', ch); op('fCR', ch); }
   /* awful: tears roll down both cheeks, one after the other */
@@ -1156,7 +1199,7 @@ function drawFace(ts){
   { const p = (ts/1900) % 1, dd = cl(F('dots')); ['fD1','fD2','fD3'].forEach((id, i) => op(id, dd*(p > 0.18 + i*0.2 ? 1 : 0.15))); }
   set('fBolt', 'transform', `translate(68 -50) scale(${(1 + 0.12*Math.sin(ts/120)).toFixed(2)})`); op('fBolt', cl(F('bolt'))*(Math.sin(ts/170) > -0.3 ? 1 : 0.25));
   const calm = 1 - 0.8*cl(F('still'));
-  svg.style.transform = `translate(${(F('shake')*1.7*Math.sin(ts/38)).toFixed(1)}px, ${(calm*Math.sin(ts/900)*(3 + 3*posi) + w(0)*1.8*Math.abs(Math.sin(ts/260)) - cl(F('bounce'))*7*Math.abs(Math.sin(ts/230))).toFixed(1)}px) rotate(${(calm*Math.sin(ts/1300)*3*posi + w(4)*2.5*Math.sin(ts/800) - 4*F('chin')).toFixed(2)}deg)`;
+  svg.style.transform = `scale(${(1 - .13*cl(F('shrink'))).toFixed(3)}) translate(${(F('shake')*1.7*Math.sin(ts/38)).toFixed(1)}px, ${(calm*Math.sin(ts/900)*(3 + 3*posi) + w(0)*1.8*Math.abs(Math.sin(ts/260)) - cl(F('bounce'))*7*Math.abs(Math.sin(ts/230))).toFixed(1)}px) rotate(${(calm*Math.sin(ts/1300)*3*posi + w(4)*2.5*Math.sin(ts/800) - 4*F('chin')).toFixed(2)}deg)`;
 }
 function faceLoop(ts){ if($('sheet').hidden && !document.hidden) drawFace(ts); requestAnimationFrame(faceLoop); }
 
@@ -1164,18 +1207,22 @@ function faceLoop(ts){ if($('sheet').hidden && !document.hidden) drawFace(ts); r
 let Gc = null;   /* where a feeling captured now would land on the curve */
 function paint(){
   const lv = lvOf(D.v), [g1,g2] = colorsAt(D.v);
-  app.style.setProperty('--g1', tint(g1, D.h/2)); app.style.setProperty('--g2', tint(g2, D.h/2, true));
+  { const f = fineColors([g1, g2], D.h, D.w); app.style.setProperty('--g1', f[0]); app.style.setProperty('--g2', f[1]); }
   const ink = inkAt(D.v); for(const k of ['fg','inv','bo','ftf']) app.style.setProperty('--' + k, ink[k]);
   $('mark').style.top = ((600 - D.v)/600*100).toFixed(2) + '%';
-  const core = coreAt(lv, D.h), nm = (core || LV[lv].name).toLowerCase(); if($('word').textContent !== nm) $('word').textContent = nm;
-  if(!ui.noticed){ const sub = core ? LV[lv].name.toLowerCase() : ''; if($('detail').textContent !== sub) $('detail').textContent = sub; }
+  const core = coreAt(lv, D.h), wd = wordAt(lv, D.h, D.w), nm = (wd || core || LV[lv].name).toLowerCase(); if($('word').textContent !== nm) $('word').textContent = nm;
+  if(!ui.noticed){ const sub = (core ? LV[lv].name + (wd ? ' › ' + core : '') : '').toLowerCase(); if($('detail').textContent !== sub) $('detail').textContent = sub; }
+  /* the up/down scale of the fine-tuning pad: the core feeling in the middle, two exact words above and two below */
+  { app.classList.toggle('cored', !!core); $('wMark').style.top = ((2 - Math.max(-2, Math.min(2, D.w)))/4*100).toFixed(1) + '%';
+    const wr = Math.round(D.w), wn = k => !core || k < -2 || k > 2 ? '' : k === 0 ? core : wordsOf(lv, core)[WI[k]], u = wn(wr + 1), d = wn(wr - 1);
+    if($('wU').textContent !== u) $('wU').textContent = u; if($('wD').textContent !== d) $('wD').textContent = d; }
   const t = $('temp'); t.setAttribute('aria-valuenow', lv); t.setAttribute('aria-valuetext', core ? `${core}, ${LV[lv].name}` : LV[lv].name);
   /* the sideways scale: one tick per feeling, the plain mood in the middle, and the neighbours named at either end */
   { const [a, b] = hRange(lv), line = $('hsLine'), hr = Math.round(D.h), nameAt = x => x < a || x > b ? '' : x === 0 ? LV[lv].name : HPOS[lv][x];
     if(line.dataset.lv !== String(lv)){ line.dataset.lv = lv; line.style.setProperty('--n', b - a); line.innerHTML = Array.from({length:b - a + 1}, (_, i) => `<i class="${a + i === 0 ? 'mid' : ''}"></i>`).join('') + '<b id="hMark"></b>'; }
     $('hMark').style.left = ((Math.max(a, Math.min(b, D.h)) - a)/(b - a)*100).toFixed(1) + '%';
     const l = nameAt(hr - 1), r = nameAt(hr + 1); if($('hL').textContent !== l) $('hL').textContent = l; if($('hR').textContent !== r) $('hR').textContent = r; }
-  $('hint').style.opacity = D.touched ? 0 : .8;
+  $('hint').style.opacity = (ui.fine ? ui.fineT : D.touched) ? 0 : .8;
   $('actions').classList.toggle('show', !!ui.noticed && !ui.drag);
   const g = $('ghost'), gl = $('ghostL');
   if(g){ const on = D.touched && Gc && !ui.noticed; g.style.display = on ? '' : 'none'; if(gl) gl.style.display = on && Gc.last ? '' : 'none';
@@ -1186,9 +1233,9 @@ const noticedRec = () => ui.noticed ? logById(ui.noticed) : null;
 function unNotice(){ notifOn(false); if(ui.noticed){ ui.adjust = ui.noticed; ui.noticed = null; paintDraft(); } }
 function paintDraft(){
   const R = noticedRec(); if(ui.noticed && !R) ui.noticed = null;
-  if(R && !drag && R.v === lvOf(D.v)) D.h = hOf(R.v, R.core);   /* a feeling picked in the list shows on the blob too */
+  if(R && !drag && R.v === lvOf(D.v)){ D.h = hOf(R.v, R.core); D.w = wOf(R.v, R.core, R.word); }   /* a feeling picked in the list shows on the blob too */
   $('actions').classList.toggle('noticed', !!R); app.classList.toggle('noticed', !!R);
-  const bits = []; if(R){ if(R.core) bits.push((R.word ? LV[R.v].name + ' › ' + R.word : LV[R.v].name).toLowerCase()); if(R.note) bits.push('“' + noteLine(R.note) + '”'); }
+  const bits = []; if(R){ if(R.core) bits.push((R.word ? LV[R.v].name + ' › ' + R.core : LV[R.v].name).toLowerCase()); if(R.note) bits.push('“' + noteLine(R.note) + '”'); }
   $('detail').textContent = bits.join('  ·  ');
   if(R){ const tx = AFFIRM[(R.af || 0) % AFFIRM.length]; if($('amText').textContent !== tx) $('amText').textContent = tx; }
   $('crownBtn').setAttribute('aria-pressed', !!(R && R.mark === 'crown')); $('skullBtn').setAttribute('aria-pressed', !!(R && R.mark === 'skull'));
@@ -1241,7 +1288,7 @@ function noteFx(){
 }
 function ending(){
   const R = noticedRec(); if(!R) return;
-  ui.noticed = null; ui.adjust = null; D.touched = false; D.h = 0; paintDraft(); paint();
+  ui.noticed = null; ui.adjust = null; D.touched = false; D.h = 0; D.w = 0; setFine(false); paintDraft(); paint();
   const st = checkState(), el = $('noted');
   endRec = R; endPop = st.done <= 4 ? st.done - 1 : -1;
   $('ndWord').innerHTML = [...'Noted!'].map((c, i) => `<span style="--i:${i}">${c}</span>`).join('') + '<span class="sp" aria-hidden="true">✨</span>';
@@ -1265,67 +1312,85 @@ function notify(R){
   clearTimeout(notifT); notifT = setTimeout(() => notifOn(false), 7000);
 }
 /* swipe vertically: up is better. It glides while you drag and settles on a level when you let go. */
-const RH = 96, RW = 76;
-let drag = null, anim = null, wheelT = null, goal = null, hGoal = null;   /* goal: the level a running glide is heading for, so quick key presses add up */
-/* glides to the nearest mood, and sideways to the nearest feeling of that mood */
-function settle(to, then, hTo){
+const RH = 96, RW = 76, RG = 64;
+let drag = null, anim = null, wheelT = null, goal = null, hGoal = null, wGoal = null;   /* goals: where a running glide is heading, so quick key presses add up */
+/* phase two: the fine-tuning pad. Sideways is the core feeling, up and down its exact word. */
+function setFine(on){
+  on = !!on; if(ui.fine === on) return; ui.fine = on; ui.fineT = false; app.classList.toggle('fine', on);
+  $('hint').textContent = on ? 'drag to fine-tune, let go to log' : 'swipe up or down, then let go';
+  if(on && !reduced()) document.querySelector('.facewrap').animate([{transform:'scale(1)'}, {transform:'scale(1.09)'}, {transform:'scale(1)'}], {duration:360, easing:'ease-out'});
+  paint();
+}
+/* opens the pad again on a check-in that is still showing */
+function reopen(){ if(!ui.noticed) return; const R = noticedRec(); unNotice(); if(R){ D.v = R.v*100; D.h = hOf(R.v, R.core); D.w = wOf(R.v, R.core, R.word); setFine(true); } }
+/* glides to the nearest mood, and on the pad to the nearest feeling and word */
+function settle(to, then, hTo, wTo){
   cancelAnimationFrame(anim);
   to = Math.max(0, Math.min(600, Math.round(to/100)*100)); goal = to;
-  const [ha, hb] = hRange(to/100), hFrom = D.h, hEnd = Math.max(ha, Math.min(hb, Math.round(hTo != null ? hTo : lvOf(D.v) === to/100 ? D.h : 0)));
-  hGoal = hEnd;
-  const done = () => { goal = null; hGoal = null; paintDraft(); paint(); if(then) then(); };
-  if(reduced()){ D.v = to; D.h = hEnd; done(); return; }
+  const [ha, hb] = hRange(to/100), hFrom = D.h, wFrom = D.w, hEnd = ui.fine ? Math.max(ha, Math.min(hb, Math.round(hTo != null ? hTo : D.h))) : 0, wEnd = hEnd ? Math.max(-2, Math.min(2, Math.round(wTo != null ? wTo : D.w))) : 0;
+  hGoal = hEnd; wGoal = wEnd;
+  const done = () => { goal = hGoal = wGoal = null; paintDraft(); paint(); if(then) then(); };
+  if(reduced()){ D.v = to; D.h = hEnd; D.w = wEnd; done(); return; }
   const from = D.v, t0 = performance.now();
-  const step = now => { const q = Math.min(1, (now - t0)/260), e = 1 - Math.pow(1-q, 3); D.v = from + (to - from)*e; D.h = hFrom + (hEnd - hFrom)*e; paint(); if(q < 1) anim = requestAnimationFrame(step); else done(); };
+  const step = now => { const q = Math.min(1, (now - t0)/260), e = 1 - Math.pow(1-q, 3); D.v = from + (to - from)*e; D.h = hFrom + (hEnd - hFrom)*e; D.w = wFrom + (wEnd - wFrom)*e; paint(); if(q < 1) anim = requestAnimationFrame(step); else done(); };
   anim = requestAnimationFrame(step);
 }
-/* letting go is the log: no button. While a check-in is still open (and fresh), another swipe corrects it instead of adding a second one. */
+/* letting go on the pad is the log: no button. While a check-in is still open (and fresh), fine-tuning again corrects it instead of adding a second one. */
 let keyT = null;
 function commit(){
   clearTimeout(keyT); if(drag || ui.drag || ui.noticed) return;
-  const lv = lvOf(D.v), core = coreAt(lv, D.h), A = ui.adjust ? logById(ui.adjust) : null; ui.adjust = null;
+  const lv = lvOf(D.v), core = coreAt(lv, D.h), word = wordAt(lv, D.h, D.w), A = ui.adjust ? logById(ui.adjust) : null; ui.adjust = null;
+  setFine(false);
   if(A && Date.now() - A.t < 180000){
     if(A.v !== lv){ A.v = lv; if(A.mark && !canMark(A, A.mark)) delete A.mark; }
-    if(A.core !== core){ A.core = core; A.word = ''; } save();
+    A.core = core; A.word = word; save();
     ui.day = TODAY(); ui.noticed = A.id; paintDraft(); renderChart(); return; }
   realize();
 }
+const toFine = () => { if(!ui.noticed && !drag) setFine(true); };
 const temp = $('temp');
-temp.addEventListener('pointerdown', e => { cancelAnimationFrame(anim); goal = null; hGoal = null; drag = {x:e.clientX, y:e.clientY, v:D.v, h:D.h, axis:'', moved:false, ax:e.clientX, ay:e.clientY}; try{ temp.setPointerCapture(e.pointerId); }catch(_){} });
+$('backBtn').addEventListener('pointerdown', e => e.stopPropagation());
+$('backBtn').addEventListener('click', () => { cancelAnimationFrame(anim); D.h = 0; D.w = 0; setFine(false); paint(); temp.focus({preventScroll:true}); });
+temp.addEventListener('pointerdown', e => { cancelAnimationFrame(anim); goal = hGoal = wGoal = null; clearTimeout(keyT); drag = {x:e.clientX, y:e.clientY, v:D.v, h:D.h, w:D.w, moved:false}; try{ temp.setPointerCapture(e.pointerId); }catch(_){} });
 temp.addEventListener('pointermove', e => {
   if(!drag) return; const x = e.clientX, y = e.clientY;
-  if(!drag.axis){ const dx = x - drag.x, dy = drag.y - y; if(Math.max(Math.abs(dx), Math.abs(dy)) < 5) return;
-    /* the first few pixels decide the direction: up/down for the mood, sideways for the feeling */
-    drag.axis = Math.abs(dx) > Math.abs(dy)*1.25 ? 'h' : 'v'; drag.moved = true; ui.drag = true;
-    if(ui.noticed){ const R = noticedRec(); unNotice(); if(R && R.v === lvOf(D.v)) D.h = hOf(R.v, R.core); }
-    drag.x = drag.ax = x; drag.y = drag.ay = y; drag.v = D.v; drag.h = D.h; }
-  /* a turn of the finger mid-swipe changes direction, so mood and feeling can be picked in one L-shaped move */
-  const tx = x - drag.ax, ty = y - drag.ay;      /* travel since the last stretch that went along the current direction */
-  if(drag.axis === 'v'){ if(Math.abs(tx) > 20 && Math.abs(tx) > 1.7*Math.abs(ty)){ drag.axis = 'h'; D.v = Math.round(D.v/100)*100; drag.x = drag.ax; drag.h = D.h; drag.ax = x; drag.ay = y; } else if(Math.abs(ty) > 22){ drag.ax = x; drag.ay = y; } }
-  else if(Math.abs(ty) > 20 && Math.abs(ty) > 1.7*Math.abs(tx)){ drag.axis = 'v'; drag.y = drag.ay; drag.v = D.v; drag.ax = x; drag.ay = y; } else if(Math.abs(tx) > 22){ drag.ax = x; drag.ay = y; }
-  if(drag.axis === 'v'){ const before = lvOf(D.v); D.v = Math.max(0, Math.min(600, drag.v + (drag.y - y)*(100/RH))); if(lvOf(D.v) !== before) D.h = 0; }
-  else { const [a, b] = hRange(lvOf(D.v)); D.h = Math.max(a - .2, Math.min(b + .2, drag.h + (x - drag.x)/RW)); }
+  if(!drag.moved){ if(Math.max(Math.abs(x - drag.x), Math.abs(y - drag.y)) < 5) return;
+    drag.moved = true; ui.drag = true; reopen();
+    drag.x = x; drag.y = y; drag.v = D.v = ui.fine ? Math.round(D.v/100)*100 : D.v; drag.h = D.h; drag.w = D.w; }
+  if(!ui.fine) D.v = Math.max(0, Math.min(600, drag.v + (drag.y - y)*(100/RH)));
+  else { const lv = lvOf(D.v), [a, b] = hRange(lv); ui.fineT = true;
+    D.h = Math.max(a - .2, Math.min(b + .2, drag.h + (x - drag.x)/RW));
+    /* the plain mood in the middle has no words of its own, so up/down only starts once a feeling is picked */
+    if(!coreAt(lv, D.h)){ D.w = 0; drag.w = 0; drag.y = y; } else D.w = Math.max(-2.2, Math.min(2.2, drag.w + (drag.y - y)/RG)); }
   D.touched = true; paint();
 });
 const endDrag = () => { if(!drag) return; const d = drag; drag = null; ui.drag = false;
   if(!d.moved && ui.noticed) return;      /* a tap while a check-in is open does nothing */
-  D.touched = true; settle(D.v, commit); };
+  D.touched = true; if(ui.fine) settle(D.v, commit); else settle(D.v, toFine); };
 temp.addEventListener('pointerup', endDrag); temp.addEventListener('pointercancel', endDrag);
-temp.addEventListener('wheel', e => { e.preventDefault(); cancelAnimationFrame(anim); goal = null; ui.drag = true; unNotice();
-  if(Math.abs(e.deltaX) > Math.abs(e.deltaY)){ const [a, b] = hRange(lvOf(D.v)); D.h = Math.max(a, Math.min(b, D.h + e.deltaX*0.012)); }
-  else { const before = lvOf(D.v); D.v = Math.max(0, Math.min(600, D.v - e.deltaY*0.5)); if(lvOf(D.v) !== before) D.h = 0; }
+temp.addEventListener('wheel', e => { e.preventDefault(); cancelAnimationFrame(anim); goal = hGoal = wGoal = null; ui.drag = true; reopen();
+  if(!ui.fine) D.v = Math.max(0, Math.min(600, D.v - e.deltaY*0.5));
+  else { const lv = lvOf(D.v), [a, b] = hRange(lv); ui.fineT = true; D.h = Math.max(a, Math.min(b, D.h + e.deltaX*0.012)); D.w = coreAt(lv, D.h) ? Math.max(-2, Math.min(2, D.w - e.deltaY*0.012)) : 0; }
   D.touched = true; paint();
-  clearTimeout(wheelT); wheelT = setTimeout(() => { ui.drag = false; settle(D.v, commit); }, 420); }, {passive:false});
+  clearTimeout(wheelT); wheelT = setTimeout(() => { ui.drag = false; settle(D.v, ui.fine ? null : toFine); }, 420); }, {passive:false});
 temp.addEventListener('keydown', e => {
   if(e.target !== temp) return;
-  const k = {ArrowUp:100, ArrowDown:-100, PageUp:200, PageDown:-200}[e.key], side = {ArrowRight:1, ArrowLeft:-1}[e.key];
-  const later = () => { clearTimeout(keyT); keyT = setTimeout(commit, 900); };
-  if(k){ e.preventDefault(); D.touched = true; unNotice(); settle((goal != null ? goal : Math.round(D.v/100)*100) + k, null, 0); later(); }
-  else if(side){ e.preventDefault(); D.touched = true; if(ui.noticed){ const R = noticedRec(); unNotice(); if(R) D.h = hOf(R.v, R.core); } settle(goal != null ? goal : D.v, null, (hGoal != null ? hGoal : Math.round(D.h)) + side); later(); }
-  else if(e.key === 'Home'){ e.preventDefault(); D.touched = true; unNotice(); settle(0, null, 0); later(); }
-  else if(e.key === 'End'){ e.preventDefault(); D.touched = true; unNotice(); settle(600, null, 0); later(); }
-  else if(e.key === 'Enter'){ e.preventDefault(); D.touched = true; clearTimeout(keyT); if(goal != null) settle(goal, commit); else commit(); }
+  const up = {ArrowUp:1, ArrowDown:-1, PageUp:2, PageDown:-2}[e.key], side = {ArrowRight:1, ArrowLeft:-1}[e.key];
+  if(!up && !side && !['Home','End','Enter','Escape'].includes(e.key)) return;
+  e.preventDefault(); D.touched = true; clearTimeout(keyT); reopen();
+  if(ui.fine){ ui.fineT = true; const lv = goal != null ? goal : D.v, h = hGoal != null ? hGoal : Math.round(D.h), w = wGoal != null ? wGoal : Math.round(D.w);
+    if(side) settle(lv, null, h + side, w); else if(up) settle(lv, null, h, w + Math.sign(up));
+    else if(e.key === 'Enter') settle(lv, commit, h, w);
+    else if(e.key === 'Escape') $('backBtn').click();
+    return; }
+  /* phase one: the mood. A short pause, or Enter, moves on to the pad. */
+  const base = goal != null ? goal : Math.round(D.v/100)*100;
+  if(e.key === 'Enter'){ settle(base, toFine); return; }
+  if(e.key === 'Escape') return;
+  settle(e.key === 'Home' ? 0 : e.key === 'End' ? 600 : base + (up || side)*100); keyT = setTimeout(toFine, 900);
 });
+/* leaving the app mid-way still keeps the mood that was picked */
+document.addEventListener('visibilitychange', () => { if(document.hidden && ui.fine && !ui.noticed && !drag) commit(); });
 
 /* ---------- the curve on top, in white ---------- */
 /* a gentle wave: every value is softened by its neighbours in time, and the line is flat at each peak and dip */
@@ -1445,7 +1510,7 @@ const dist = (a,b) => { const k = Math.cos(a.lat*Math.PI/180), dx = (a.lng-b.lng
 function realize(){
   if(ui.noticed) return;
   const lv = lvOf(D.v);
-  const rec = {id:'l' + Date.now().toString(36) + Math.random().toString(36).slice(2,5), t:Date.now(), v:lv, core:coreAt(lv, D.h), word:'', note:'', place:'', geo:null, af:store.logs.filter(l => !l.ex).length % AFFIRM.length};
+  const rec = {id:'l' + Date.now().toString(36) + Math.random().toString(36).slice(2,5), t:Date.now(), v:lv, core:coreAt(lv, D.h), word:wordAt(lv, D.h, D.w), note:'', place:'', geo:null, af:store.logs.filter(l => !l.ex).length % AFFIRM.length};
   store.logs.push(rec); save();
   notifOn(false);
   /* the place is added by itself when the device shares its location: a named spot within 200 m is recognised */
@@ -1476,7 +1541,7 @@ const tv = T => T === D ? lvOf(D.v) : T.v;
 const mine = () => { if(SH && SH.isLog) delete SH.T.ex; };
 function openSheet(kind, T, back, flow){
   hideTip(); clearTimeout(chatTimer); SH = {kind, T, back, flow, isLog: !!T && T !== D};
-  const sh = $('sheet'), lv = T ? tv(T) : 3, g = T === D ? tint2(colorsAt(D.v), D.h/2) : T && T.id ? logColors(T) : LV[lv].c;
+  const sh = $('sheet'), lv = T ? tv(T) : 3, g = T === D ? fineColors(colorsAt(D.v), D.h, D.w) : T && T.id ? logColors(T) : LV[lv].c;
   const X = `<button type="button" class="x" data-a="close" aria-label="${back ? 'Back' : 'Close'}"><svg width="16" height="16" viewBox="0 0 16 16">${back ? '<path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' : '<path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'}</svg></button>`;
   const shInk = inkAt(T === D ? D.v : lv*100);
   let body, actions = '';
